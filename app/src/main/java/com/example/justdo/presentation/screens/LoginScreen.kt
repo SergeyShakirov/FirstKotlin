@@ -18,7 +18,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun LoginScreen(
     repository: MessengerRepository,
-    onLoginSuccess: (User) -> Unit,
+    onLoginSuccess: () -> Unit,
     onRegisterClick: () -> Unit
 ) {
     var username by remember { mutableStateOf("") }
@@ -43,8 +43,12 @@ fun LoginScreen(
             onLoginClick = {
                 scope.launch {
                     try {
-                        val user = repository.login(username, password)
-                        onLoginSuccess(user)
+                        val success = repository.login(username, password)
+                        if (success) {
+                            onLoginSuccess()
+                        } else {
+                            error = "Неверный логин или пароль"
+                        }
                     } catch (e: Exception) {
                         error = e.message ?: "Ошибка авторизации"
                     }

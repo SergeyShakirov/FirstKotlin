@@ -25,8 +25,7 @@ fun MyApp(repository: MessengerRepository) {
                 !isAuthenticated && !isRegistering -> {
                     LoginScreen(
                         repository = repository,
-                        onLoginSuccess = { user ->
-                            currentUser = user
+                        onLoginSuccess = {
                             isAuthenticated = true
                         },
                         onRegisterClick = {

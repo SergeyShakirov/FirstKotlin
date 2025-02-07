@@ -7,18 +7,20 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import java.text.SimpleDateFormat
 import java.util.*
-import androidx.compose.material.icons.filled.ArrowBack
 import com.example.justdo.data.MessengerRepository
 import com.example.justdo.data.User
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 data class Message(
@@ -28,6 +30,11 @@ data class Message(
     val timestamp: Long = System.currentTimeMillis()
 )
 
+sealed class ChatItem {
+    data class MessageItem(val message: Message) : ChatItem()
+    data class DateHeader(val date: String) : ChatItem()
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(user: User?, onBack: () -> Unit) {
@@ -35,9 +42,28 @@ fun ChatScreen(user: User?, onBack: () -> Unit) {
     var messages by remember { mutableStateOf(listOf<Message>()) }
     val lazyListState = rememberLazyListState()
     val scope = rememberCoroutineScope()
-    val dateFormatter = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
+    val timeFormatter = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
+    val dateFormatter = remember { SimpleDateFormat("d MMMM yyyy", Locale.getDefault()) }
     val snackbarHostState = remember { SnackbarHostState() }
     var isLoading by remember { mutableStateOf(false) }
+
+    // Группировка сообщений по датам
+    val chatItems = remember(messages) {
+        messages
+            .sortedBy { it.timestamp }
+            .groupBy {
+                Calendar.getInstance().apply { timeInMillis = it.timestamp }.apply {
+                    set(Calendar.HOUR_OF_DAY, 0)
+                    set(Calendar.MINUTE, 0)
+                    set(Calendar.SECOND, 0)
+                    set(Calendar.MILLISECOND, 0)
+                }.timeInMillis
+            }
+            .flatMap { (date, messagesForDate) ->
+                listOf(ChatItem.DateHeader(dateFormatter.format(Date(date)))) +
+                        messagesForDate.map { ChatItem.MessageItem(it) }
+            }
+    }
 
     val updateData = {
         scope.launch {
@@ -58,7 +84,14 @@ fun ChatScreen(user: User?, onBack: () -> Unit) {
 
     // Загружаем сообщения при первом запуске
     LaunchedEffect(Unit) {
-        updateData()
+        while (true) {
+            try {
+                updateData()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+            delay(5000)
+        }
     }
 
     // Прокрутка к последнему сообщению
@@ -71,12 +104,12 @@ fun ChatScreen(user: User?, onBack: () -> Unit) {
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
-            SmallTopAppBar(
+            TopAppBar(
                 title = { Text(text = user?.name ?: "") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(
-                            imageVector = Icons.Default.ArrowBack,
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back"
                         )
                     }
@@ -104,11 +137,14 @@ fun ChatScreen(user: User?, onBack: () -> Unit) {
                 state = lazyListState,
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(messages) { message ->
-                    ChatMessage(
-                        message = message,
-                        dateFormatter = dateFormatter
-                    )
+                items(chatItems) { item ->
+                    when (item) {
+                        is ChatItem.DateHeader -> DateHeader(date = item.date)
+                        is ChatItem.MessageItem -> ChatMessage(
+                            message = item.message,
+                            dateFormatter = timeFormatter
+                        )
+                    }
                 }
             }
 
@@ -159,13 +195,34 @@ fun ChatScreen(user: User?, onBack: () -> Unit) {
                         }
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Send,
+                            imageVector = Icons.AutoMirrored.Filled.Send,
                             contentDescription = "Send message"
                         )
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+fun DateHeader(date: String) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp)
+    ) {
+        Text(
+            text = date,
+            modifier = Modifier
+                .align(Alignment.Center)
+                .clip(RoundedCornerShape(16.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center
+        )
     }
 }
 

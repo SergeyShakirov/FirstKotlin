@@ -1,7 +1,6 @@
 package com.example.justdo.presentation.screens
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -10,9 +9,7 @@ import com.example.justdo.data.User
 import com.example.justdo.presentation.components.UserListContent
 import com.example.justdo.presentation.components.UserListTopBar
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun UserList(
     repository: MessengerRepository,
@@ -21,7 +18,6 @@ fun UserList(
 ) {
     var users by remember { mutableStateOf<List<User>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
-    val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
         while (true) {
