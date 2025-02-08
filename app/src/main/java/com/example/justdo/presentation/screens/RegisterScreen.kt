@@ -1,22 +1,19 @@
 package com.example.justdo.presentation.screens
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.example.justdo.data.MessengerRepository
-import com.example.justdo.data.User
 import com.example.justdo.presentation.components.RegisterForm
 import com.example.justdo.presentation.components.RegisterHeader
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RegisterScreen(
     repository: MessengerRepository,
-    onRegisterSuccess: (User) -> Unit,
+    onRegisterSuccess: (Boolean) -> Unit,
     onBackToLogin: () -> Unit
 ) {
     var username by remember { mutableStateOf("") }

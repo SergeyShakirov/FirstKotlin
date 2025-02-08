@@ -1,7 +1,7 @@
 package com.example.justdo.network
 
 import android.util.Log
-import com.example.justdo.presentation.screens.Message
+import com.example.justdo.data.Message
 import com.example.justdo.data.User
 import org.w3c.dom.Document
 import org.w3c.dom.Element

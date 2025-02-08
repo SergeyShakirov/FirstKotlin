@@ -1,8 +1,8 @@
 package com.example.justdo.network
 
 import android.util.Base64
+import com.example.justdo.data.Message
 import com.example.justdo.data.User
-import com.example.justdo.presentation.screens.Message
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -186,6 +186,48 @@ object RestApi {
                 "Content": "$message"
             }
             """.trimIndent()
+
+            connection.outputStream.use { os ->
+                val input = jsonBody.toByteArray(Charsets.UTF_8)
+                os.write(input, 0, input.size)
+            }
+
+            if (connection.responseCode != HttpURLConnection.HTTP_OK) {
+                val errorStream = connection.errorStream
+                val errorResponse = errorStream?.bufferedReader()?.use { it.readText() } ?: "Нет дополнительной информации"
+                throw Exception("Ошибка HTTP ${connection.responseCode}: $errorResponse")
+            }
+
+            true
+
+        } catch (e: Exception) {
+            throw Exception("Ошибка отправки сообщения: ${e.message}")
+        } finally {
+            connection.disconnect()
+        }
+
+    }
+
+    suspend fun register(username: String, password: String): Boolean = withContext(Dispatchers.IO) {
+
+        val url = URL("$BASE_URL/createUser")
+        val connection = url.openConnection() as HttpURLConnection
+
+        try {
+            connection.apply {
+                requestMethod = "POST"
+                setRequestProperty("Authorization",
+                    "Basic ${getBasicAuth("Admin", "")}")
+                setRequestProperty("Content-Type", "application/json")
+                doOutput = true
+            }
+
+            val jsonBody = """
+                {
+                    "Login": "$username",
+                    "Password": "$password"
+                }
+                """.trimIndent()
 
             connection.outputStream.use { os ->
                 val input = jsonBody.toByteArray(Charsets.UTF_8)

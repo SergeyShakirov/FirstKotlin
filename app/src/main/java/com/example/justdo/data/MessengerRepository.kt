@@ -2,9 +2,6 @@ package com.example.justdo.data
 
 import android.util.Log
 import com.example.justdo.network.RestApi
-import com.example.justdo.presentation.screens.Message
-import com.example.justdo.network.SoapApi
-import com.example.justdo.network.XmlParser
 
 class MessengerRepository {
     suspend fun login(username: String, password: String): Boolean {
@@ -15,22 +12,10 @@ class MessengerRepository {
         }
     }
 
-    suspend fun register(username: String, password: String): User {
+    suspend fun register(username: String, password: String): Boolean {
         return try {
-            Log.d("MessengerRepository", "Начало регистрации для пользователя: $username")
-
-            val response = SoapApi.register(username, password)
-            Log.d("MessengerRepository", "Ответ сервера: $response")
-
-            val registeredUser = XmlParser.parseLoginResponse(response)
-            Log.d("MessengerRepository", "Результат парсинга: $registeredUser")
-
-            val loginResponse = SoapApi.login(username, password)
-            Log.d("MessengerRepository", "Ответ на логин: $loginResponse")
-
-            XmlParser.parseLoginResponse(loginResponse)
-                ?: throw Exception("Ошибка авторизации")
-
+            RestApi.register(username, password)
+            RestApi.login(username, password)
         } catch (e: Exception) {
             Log.e("MessengerRepository", "Ошибка при регистрации", e)
             throw Exception("Ошибка регистрации: ${e.message}")

@@ -16,19 +16,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.example.justdo.data.Message
 import java.text.SimpleDateFormat
 import java.util.*
 import com.example.justdo.data.MessengerRepository
 import com.example.justdo.data.User
+import com.example.justdo.utils.NotificationHelper
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-
-data class Message(
-    val id: String = UUID.randomUUID().toString(),
-    val content: String,
-    val isFromMe: Boolean,
-    val timestamp: Long = System.currentTimeMillis()
-)
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
 
 sealed class ChatItem {
     data class MessageItem(val message: Message) : ChatItem()
@@ -38,6 +35,7 @@ sealed class ChatItem {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(user: User?, onBack: () -> Unit) {
+    val context = LocalContext.current
     var messageText by remember { mutableStateOf("") }
     var messages by remember { mutableStateOf(listOf<Message>()) }
     val lazyListState = rememberLazyListState()
@@ -46,13 +44,17 @@ fun ChatScreen(user: User?, onBack: () -> Unit) {
     val dateFormatter = remember { SimpleDateFormat("d MMMM yyyy", Locale.getDefault()) }
     val snackbarHostState = remember { SnackbarHostState() }
     var isLoading by remember { mutableStateOf(false) }
+    val notificationHelper = remember { NotificationHelper(context) }
+    var lastProcessedMessageId by remember { mutableStateOf("") }
+    var isSending by remember { mutableStateOf(false) }
 
     // Группировка сообщений по датам
     val chatItems = remember(messages) {
         messages
             .sortedBy { it.timestamp }
             .groupBy {
-                Calendar.getInstance().apply { timeInMillis = it.timestamp }.apply {
+                Calendar.getInstance().apply {
+                    timeInMillis = it.timestamp
                     set(Calendar.HOUR_OF_DAY, 0)
                     set(Calendar.MINUTE, 0)
                     set(Calendar.SECOND, 0)
@@ -87,10 +89,10 @@ fun ChatScreen(user: User?, onBack: () -> Unit) {
         while (true) {
             try {
                 updateData()
+                delay(5000)  // Перенесем delay в конец цикла
             } catch (e: Exception) {
                 e.printStackTrace()
             }
-            delay(5000)
         }
     }
 
@@ -98,6 +100,25 @@ fun ChatScreen(user: User?, onBack: () -> Unit) {
     LaunchedEffect(messages.size) {
         if (messages.isNotEmpty()) {
             lazyListState.animateScrollToItem(messages.size - 1)
+        }
+    }
+
+    // Обработка новых сообщений
+    LaunchedEffect(messages) {
+        messages.forEach { message ->
+            if (!message.isFromMe &&
+                message.id != lastProcessedMessageId &&
+                message.timestamp > System.currentTimeMillis() - 10000) { // проверяем только последние 10 секунд
+                notificationHelper.showMessageNotification(message, user?.name ?: "")
+                lastProcessedMessageId = message.id
+            }
+        }
+    }
+
+    // Отмена уведомлений при открытии чата
+    DisposableEffect(Unit) {
+        onDispose {
+            notificationHelper.cancelAllNotifications()
         }
     }
 
@@ -169,35 +190,49 @@ fun ChatScreen(user: User?, onBack: () -> Unit) {
                     )
                     IconButton(
                         onClick = {
-                            if (messageText.isNotBlank()) {
-                                val newMessage = Message(
-                                    content = messageText,
-                                    isFromMe = true
-                                )
-                                messages = messages + newMessage
-                                val messageToSend = messageText
-                                messageText = ""
 
-                                scope.launch {
-                                    try {
-                                        user?.id?.let { userId ->
-                                            MessengerRepository().sendMessage(userId, messageToSend)
+                            if (messageText.isNotBlank() && !isSending) {
+                                isSending = true
+
+                                    val newMessage = Message(
+                                        content = messageText,
+                                        isFromMe = true
+                                    )
+                                    messages = messages + newMessage
+                                    val messageToSend = messageText
+                                    messageText = ""
+
+                                    scope.launch {
+                                        try {
+                                            user?.id?.let { userId ->
+                                                MessengerRepository().sendMessage(userId, messageToSend)
+                                            }
+                                        } catch (e: Exception) {
+                                            // Удаляем сообщение в случае ошибки
+                                            messages = messages.filterNot { it.id == newMessage.id }
+                                            snackbarHostState.showSnackbar(
+                                                message = e.message ?: "Ошибка отправки сообщения"
+                                            )
+                                        } finally {
+                                            isSending = false
                                         }
-                                    } catch (e: Exception) {
-                                        // Удаляем сообщение в случае ошибки
-                                        messages = messages.filterNot { it.id == newMessage.id }
-                                        snackbarHostState.showSnackbar(
-                                            message = e.message ?: "Ошибка отправки сообщения"
-                                        )
                                     }
-                                }
+
+
                             }
-                        }
+
+
+                        },
+                        enabled = !isSending && messageText.isNotBlank()
                     ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.Send,
-                            contentDescription = "Send message"
-                        )
+                        if (isSending) {
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                        } else {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.Send,
+                                contentDescription = "Send message"
+                            )
+                        }
                     }
                 }
             }
