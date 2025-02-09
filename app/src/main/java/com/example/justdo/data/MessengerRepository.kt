@@ -4,7 +4,7 @@ import android.util.Log
 import com.example.justdo.network.RestApi
 
 class MessengerRepository {
-    suspend fun login(username: String, password: String): Boolean {
+    suspend fun login(username: String, password: String): User {
         return try {
             RestApi.login(username, password)
         } catch (e: Exception) {
@@ -12,7 +12,7 @@ class MessengerRepository {
         }
     }
 
-    suspend fun register(username: String, password: String): Boolean {
+    suspend fun register(username: String, password: String): User {
         return try {
             RestApi.register(username, password)
             RestApi.login(username, password)

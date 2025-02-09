@@ -67,12 +67,14 @@ fun ChatScreen(user: User?, onBack: () -> Unit) {
             }
     }
 
-    val updateData = {
-        scope.launch {
-            isLoading = true
+    // Загружаем сообщения каждые 5 секунд
+    LaunchedEffect(user?.id) {
+        val repository = MessengerRepository()
+        while (true) {
             try {
+                isLoading = messages.isEmpty()
                 if (user != null) {
-                    messages = MessengerRepository().refreshMessages(user.id)
+                    messages = repository.refreshMessages(user.id)
                 }
             } catch (e: Exception) {
                 snackbarHostState.showSnackbar(
@@ -81,18 +83,7 @@ fun ChatScreen(user: User?, onBack: () -> Unit) {
             } finally {
                 isLoading = false
             }
-        }
-    }
-
-    // Загружаем сообщения при первом запуске
-    LaunchedEffect(Unit) {
-        while (true) {
-            try {
-                updateData()
-                delay(5000)  // Перенесем delay в конец цикла
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
+            delay(5000)
         }
     }
 
@@ -103,20 +94,21 @@ fun ChatScreen(user: User?, onBack: () -> Unit) {
         }
     }
 
-    // Обработка новых сообщений
+    // Обработка новых сообщений для уведомлений
     LaunchedEffect(messages) {
-        messages.forEach { message ->
+        for (message in messages) {
             if (!message.isFromMe &&
                 message.id != lastProcessedMessageId &&
-                message.timestamp > System.currentTimeMillis() - 10000) { // проверяем только последние 10 секунд
+                message.timestamp > System.currentTimeMillis() - 10000
+            ) {
                 notificationHelper.showMessageNotification(message, user?.name ?: "")
                 lastProcessedMessageId = message.id
             }
         }
     }
 
-    // Отмена уведомлений при открытии чата
-    DisposableEffect(Unit) {
+    // Очистка при уничтожении
+    DisposableEffect(key1 = user?.id) {
         onDispose {
             notificationHelper.cancelAllNotifications()
         }

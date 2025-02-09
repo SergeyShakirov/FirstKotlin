@@ -6,6 +6,8 @@ import com.example.justdo.data.User
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
+import org.json.JSONObject
+import org.json.JSONStringer
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
@@ -75,7 +77,19 @@ object RestApi {
         }
     }
 
-    suspend fun login(username: String, password: String): Boolean = withContext(Dispatchers.IO) {
+    private fun parseLoginResponse(username: String, jsonString: String): User {
+        return try {
+            val jsonObject = JSONObject(jsonString)
+            User(
+                id = jsonObject.getString("id"),
+                name = username
+            )
+        } catch (e: Exception) {
+            throw Exception("Ошибка парсинга JSON: ${e.message}")
+        }
+    }
+
+    suspend fun login(username: String, password: String): User = withContext(Dispatchers.IO) {
         val url = URL("$BASE_URL/login")
         val connection = url.openConnection() as HttpURLConnection
 
@@ -89,7 +103,15 @@ object RestApi {
             currentUsername = username
             currentPassword = password
 
-            return@withContext connection.responseCode == HttpURLConnection.HTTP_OK
+            if (connection.responseCode != HttpURLConnection.HTTP_OK) {
+                throw Exception("HTTP error code: ${connection.responseCode}")
+            }
+
+            val response = BufferedReader(InputStreamReader(connection.inputStream)).use {
+                it.readText()
+            }
+
+            parseLoginResponse(username, response)
 
         } catch (e: Exception) {
             throw Exception("Ошибка авторизации: ${e.message}")

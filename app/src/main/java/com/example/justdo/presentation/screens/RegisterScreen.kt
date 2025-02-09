@@ -6,6 +6,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.example.justdo.data.MessengerRepository
+import com.example.justdo.data.User
 import com.example.justdo.presentation.components.RegisterForm
 import com.example.justdo.presentation.components.RegisterHeader
 import kotlinx.coroutines.launch
@@ -13,7 +14,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun RegisterScreen(
     repository: MessengerRepository,
-    onRegisterSuccess: (Boolean) -> Unit,
+    onRegisterSuccess: (User) -> Unit,
     onBackToLogin: () -> Unit
 ) {
     var username by remember { mutableStateOf("") }

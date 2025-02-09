@@ -7,14 +7,12 @@ import androidx.compose.ui.Modifier
 import com.example.justdo.data.MessengerRepository
 import com.example.justdo.data.User
 import com.example.justdo.presentation.components.UserListContent
-import com.example.justdo.presentation.components.UserListTopBar
 import kotlinx.coroutines.delay
 
 @Composable
 fun UserList(
     repository: MessengerRepository,
-    onUserClicked: (User) -> Unit,
-    onLogout: () -> Unit
+    onUserClicked: (User) -> Unit
 ) {
     var users by remember { mutableStateOf<List<User>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
@@ -32,14 +30,9 @@ fun UserList(
         }
     }
 
-    Scaffold(
-        topBar = {
-            UserListTopBar(onLogout = onLogout)
-        }
-    ) { paddingValues ->
+    Scaffold { paddingValues ->
         UserListContent(
             users = users,
-            isLoading = isLoading,
             onUserClicked = onUserClicked,
             modifier = Modifier.padding(paddingValues)
         )
