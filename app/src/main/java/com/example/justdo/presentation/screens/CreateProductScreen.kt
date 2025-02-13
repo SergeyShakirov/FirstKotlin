@@ -12,7 +12,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import com.example.justdo.data.User
+import com.example.justdo.data.models.User
+import com.example.justdo.data.models.Product
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -107,7 +108,7 @@ fun CreateProductScreen(
             Button(
                 onClick = {
                     val newProduct = Product(
-                        id = System.currentTimeMillis().toInt(), // Временный ID
+                        id = System.currentTimeMillis().toString(), // Временный ID
                         name = name,
                         price = price.toDoubleOrNull() ?: 0.0,
                         description = description,

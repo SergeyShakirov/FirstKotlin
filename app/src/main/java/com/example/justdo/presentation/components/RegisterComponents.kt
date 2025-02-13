@@ -19,6 +19,8 @@ fun RegisterHeader() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RegisterForm(
+    email: String,
+    onEmailChange: (String) -> Unit,
     username: String,
     onUsernameChange: (String) -> Unit,
     password: String,
@@ -26,12 +28,23 @@ fun RegisterForm(
     confirmPassword: String,
     onConfirmPasswordChange: (String) -> Unit,
     error: String?,
+    isLoading: Boolean,
     onRegisterClick: () -> Unit,
     onBackToLoginClick: () -> Unit
 ) {
     Column(
         modifier = Modifier.fillMaxWidth()
     ) {
+        OutlinedTextField(
+            value = email,
+            onValueChange = onEmailChange,
+            label = { Text("e-mail") },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 16.dp),
+            singleLine = true
+        )
+
         OutlinedTextField(
             value = username,
             onValueChange = onUsernameChange,
@@ -76,7 +89,8 @@ fun RegisterForm(
             onClick = onRegisterClick,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 8.dp)
+                .padding(bottom = 8.dp),
+            enabled = !isLoading
         ) {
             Text("Зарегистрироваться")
         }

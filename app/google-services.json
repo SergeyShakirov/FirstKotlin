@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "567399960074",
+    "project_id": "justdo-3104e",
+    "storage_bucket": "justdo-3104e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:567399960074:android:8cfe8378fc0bc231d019f3",
+        "android_client_info": {
+          "package_name": "com.example.justdo"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDWo3AzVFExCW4mkRLhFWP34Uo8YPleOcA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

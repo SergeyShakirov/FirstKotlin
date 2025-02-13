@@ -3,6 +3,7 @@ package com.example.justdo.utils
 import android.content.Context
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKeys
+import com.example.justdo.data.models.User
 
 class SessionManager(context: Context) {
     private val masterKeyAlias = MasterKeys.getOrCreate(MasterKeys.AES256_GCM_SPEC)
@@ -15,20 +16,22 @@ class SessionManager(context: Context) {
         EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
     )
 
-    fun saveCredentials(username: String, password: String) {
+    fun saveCredentials(userId: String, username: String, password: String) {
         sharedPreferences.edit()
+            .putString(KEY_USER_ID, userId)
             .putString(KEY_USERNAME, username)
             .putString(KEY_PASSWORD, password)
             .apply()
     }
 
-    fun getCredentials(): Pair<String, String>? {
-        val username = sharedPreferences.getString(KEY_USERNAME, null)
-        val password = sharedPreferences.getString(KEY_PASSWORD, null)
-        return if (username != null && password != null) {
-            Pair(username, password)
-        } else {
-            null
+    fun getCredentials(): User? {
+
+        return sharedPreferences.getString(KEY_USER_ID, "")?.let {
+            User(
+                id = it,
+                name = sharedPreferences.getString(KEY_USERNAME, "")!!,
+                password = sharedPreferences.getString(KEY_PASSWORD, "")!!
+            )
         }
     }
 
@@ -37,6 +40,7 @@ class SessionManager(context: Context) {
     }
 
     companion object {
+        private const val KEY_USER_ID = "userId"
         private const val KEY_USERNAME = "username"
         private const val KEY_PASSWORD = "password"
     }

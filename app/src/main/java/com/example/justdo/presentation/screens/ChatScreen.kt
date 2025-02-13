@@ -16,11 +16,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.example.justdo.data.Message
+import com.example.justdo.data.models.Message
 import java.text.SimpleDateFormat
 import java.util.*
-import com.example.justdo.data.MessengerRepository
-import com.example.justdo.data.User
+import com.example.justdo.data.repository.MessengerRepository
+import com.example.justdo.data.models.User
 import com.example.justdo.utils.NotificationHelper
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -69,7 +69,8 @@ fun ChatScreen(user: User?, onBack: () -> Unit) {
 
     // Загружаем сообщения каждые 5 секунд
     LaunchedEffect(user?.id) {
-        val repository = MessengerRepository()
+        val repository = MessengerRepository(context)
+
         while (true) {
             try {
                 isLoading = messages.isEmpty()
@@ -101,7 +102,7 @@ fun ChatScreen(user: User?, onBack: () -> Unit) {
                 message.id != lastProcessedMessageId &&
                 message.timestamp > System.currentTimeMillis() - 10000
             ) {
-                notificationHelper.showMessageNotification(message, user?.name ?: "")
+                //notificationHelper.showMessageNotification(message, user?.name ?: "")
                 lastProcessedMessageId = message.id
             }
         }
@@ -186,36 +187,33 @@ fun ChatScreen(user: User?, onBack: () -> Unit) {
                             if (messageText.isNotBlank() && !isSending) {
                                 isSending = true
 
-                                    val newMessage = Message(
-                                        content = messageText,
-                                        isFromMe = true
-                                    )
-                                    messages = messages + newMessage
-                                    val messageToSend = messageText
-                                    messageText = ""
+                                val newMessage = Message(
+                                    id = UUID.randomUUID().toString(),
+                                    content = messageText,
+                                    isFromMe = true,
+                                    timestamp = System.currentTimeMillis()
+                                )
+                                messages = messages + newMessage
+                                val messageToSend = messageText
+                                messageText = ""
 
-                                    scope.launch {
-                                        try {
-                                            user?.id?.let { userId ->
-                                                MessengerRepository().sendMessage(userId, messageToSend)
-                                            }
-                                        } catch (e: Exception) {
-                                            // Удаляем сообщение в случае ошибки
-                                            messages = messages.filterNot { it.id == newMessage.id }
-                                            snackbarHostState.showSnackbar(
-                                                message = e.message ?: "Ошибка отправки сообщения"
-                                            )
-                                        } finally {
-                                            isSending = false
+                                scope.launch {
+                                    try {
+                                        user?.id?.let { userId ->
+                                            MessengerRepository(context).sendMessage(userId, messageToSend)
                                         }
+                                    } catch (e: Exception) {
+                                        // Удаляем сообщение в случае ошибки
+                                        messages = messages.filterNot { it.id == newMessage.id }
+                                        snackbarHostState.showSnackbar(
+                                            message = e.message ?: "Ошибка отправки сообщения"
+                                        )
+                                    } finally {
+                                        isSending = false
                                     }
-
-
+                                }
                             }
-
-
-                        },
-                        enabled = !isSending && messageText.isNotBlank()
+                        }, enabled = !isSending && messageText.isNotBlank()
                     ) {
                         if (isSending) {
                             CircularProgressIndicator(modifier = Modifier.size(24.dp))
@@ -273,10 +271,8 @@ fun ChatMessage(
                     )
                 )
                 .background(
-                    if (message.isFromMe)
-                        MaterialTheme.colorScheme.primary
-                    else
-                        MaterialTheme.colorScheme.secondaryContainer
+                    if (message.isFromMe) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.secondaryContainer
                 )
                 .padding(12.dp)
         ) {

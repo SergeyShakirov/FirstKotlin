@@ -4,14 +4,15 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import com.example.justdo.data.MessengerRepository
-import com.example.justdo.data.User
+import com.example.justdo.data.repository.MessengerRepository
+import com.example.justdo.data.models.User
+import com.example.justdo.data.repository.AuthRepository
 import com.example.justdo.presentation.components.UserListContent
 import kotlinx.coroutines.delay
 
 @Composable
 fun UserList(
-    repository: MessengerRepository,
+    repository: AuthRepository,
     onUserClicked: (User) -> Unit
 ) {
     var users by remember { mutableStateOf<List<User>>(emptyList()) }
@@ -20,7 +21,7 @@ fun UserList(
     LaunchedEffect(Unit) {
         while (true) {
             try {
-                users = repository.getUsers()
+                //users = repository.getUsers()
             } catch (e: Exception) {
                 e.printStackTrace()
             } finally {

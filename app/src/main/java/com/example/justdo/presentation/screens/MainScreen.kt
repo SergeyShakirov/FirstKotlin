@@ -12,13 +12,19 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavType
 import androidx.navigation.compose.*
 import androidx.navigation.navArgument
-import com.example.justdo.data.MessengerRepository
-import com.example.justdo.data.User
+import com.example.justdo.data.repository.MessengerRepository
+import com.example.justdo.data.models.User
+import com.example.justdo.data.models.Product
+import com.example.justdo.data.repository.AuthRepository
 import com.example.justdo.navigation.Screen
+import com.example.justdo.presentation.screens.products.ProductsScreen
+import com.example.justdo.presentation.screens.products.detail.ProductDetailScreen
 import com.example.justdo.utils.SessionManager
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @Composable
-fun MyApp(repository: MessengerRepository) {
+fun MyApp(repository: AuthRepository) {
     var isAuthenticated by remember { mutableStateOf(false) }
     var isRegistering by remember { mutableStateOf(false) }
     var selectedUser by remember { mutableStateOf<User?>(null) }
@@ -26,29 +32,20 @@ fun MyApp(repository: MessengerRepository) {
     val navController = rememberNavController()
     val context = LocalContext.current
     val sessionManager = remember { SessionManager(context) }
+    var products by remember { mutableStateOf<List<Product>>(emptyList()) }
+    val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
 
-    var products = listOf(
-        Product(
-            id = 1,
-            name = "Смарт-часы",
-            price = 199.99,
-            description = "Современные смарт-часы с множеством функций для отслеживания активности и здоровья.",
-            seller = User(
-                id = "49bf4187-e38c-11ef-acda-98fa9b5804bb",
-                name = "Сергей"
-            )
-        ),
-        Product(
-            id = 2,
-            name = "Bluetooth-наушники",
-            price = 129.99,
-            description = "Беспроводные наушники с активным шумоподавлением и кристально чистым звуком.",
-            seller = User(
-                id = "49c05ca2-e5f0-11ef-acdc-98fa9b5804bb",
-                name = "Милаша"
-            )
-        )
-    )
+//    LaunchedEffect(Unit) {
+//        while (true) {
+//            try {
+//                products = repository.products()
+//            } catch (e: Exception) {
+//                e.printStackTrace()
+//            }
+//            delay(5000)
+//        }
+//    }
 
     Scaffold(
         bottomBar = {
@@ -103,7 +100,7 @@ fun MyApp(repository: MessengerRepository) {
             modifier = Modifier.padding(paddingValues)
         ) {
             composable("login") {
-                LoginScreen(
+                AnimatedLoginScreen(
                     repository = repository,
                     onLoginSuccess = { user ->
                         isAuthenticated = true
@@ -113,25 +110,22 @@ fun MyApp(repository: MessengerRepository) {
                         currentUser = user
                     },
                     onRegisterClick = {
-                        isRegistering = true
                         navController.navigate("register")
                     }
                 )
             }
 
             composable("register") {
-                RegisterScreen(
+                AnimatedRegisterScreen(
                     repository = repository,
                     onRegisterSuccess = { user ->
                         isAuthenticated = true
-                        isRegistering = false
                         navController.navigate(Screen.Users.route) {
                             popUpTo(0)
                         }
                         currentUser = user
                     },
                     onBackToLogin = {
-                        isRegistering = false
                         navController.navigateUp()
                     }
                 )
@@ -161,10 +155,10 @@ fun MyApp(repository: MessengerRepository) {
             composable(
                 route = "product_detail/{productId}",
                 arguments = listOf(
-                    navArgument("productId") { type = NavType.IntType }
+                    navArgument("productId") { type = NavType.StringType }
                 )
             ) { backStackEntry ->
-                val productId = backStackEntry.arguments?.getInt("productId")
+                val productId = backStackEntry.arguments?.getString("productId")
                     ?: return@composable
 
                 val product = products.find { it.id == productId }
@@ -195,7 +189,7 @@ fun MyApp(repository: MessengerRepository) {
                 ProfileScreen(
                     user = currentUser, // Используйте текущего авторизованного пользователя
                     onLogout = {
-                        sessionManager.clearCredentials()
+                        repository.logout()
                         isAuthenticated = false
                         currentUser = null
                         navController.navigate("login") {
@@ -211,8 +205,21 @@ fun MyApp(repository: MessengerRepository) {
                 CreateProductScreen(
                     onBackClick = { navController.navigateUp() },
                     onProductCreate = { newProduct ->
-                        // Логика добавления товара (например, в репозиторий)
-                        products = products + newProduct
+                        scope.launch {
+                            try {
+                                //repository.addProduct(newProduct)
+                                navController.navigate(Screen.Products.route) {
+                                    // Очищаем бэкстек до экрана продуктов
+                                    popUpTo(Screen.Products.route) {
+                                        inclusive = true
+                                    }
+                                }
+                            }catch (e: Exception){
+                                snackbarHostState.showSnackbar(
+                                    message = e.message ?: "Ошибка создания товара")
+                            }
+
+                        }
                         navController.navigateUp()
                     },
                     currentUser = currentUser

@@ -19,16 +19,29 @@ fun LoginHeader() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LoginForm(
+    email: String,
+    onEmailChange: (String) -> Unit,
     username: String,
     onUsernameChange: (String) -> Unit,
     password: String,
     onPasswordChange: (String) -> Unit,
     error: String?,
+    isLoading: Boolean,
     onLoginClick: () -> Unit
 ) {
     Column(
         modifier = Modifier.fillMaxWidth()
     ) {
+        OutlinedTextField(
+            value = email,
+            onValueChange = onEmailChange,
+            label = { Text("e-mail") },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 16.dp),
+            singleLine = true
+        )
+
         OutlinedTextField(
             value = username,
             onValueChange = onUsernameChange,
@@ -60,7 +73,8 @@ fun LoginForm(
 
         Button(
             onClick = onLoginClick,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
+            enabled = !isLoading
         ) {
             Text("Войти")
         }
