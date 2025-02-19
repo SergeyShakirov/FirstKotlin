@@ -30,7 +30,7 @@ fun UserListContent(
                 elevation = CardDefaults.cardElevation(4.dp)
             ) {
                 Text(
-                    text = user.name,
+                    text = user.username,
                     modifier = Modifier.padding(16.dp),
                     style = MaterialTheme.typography.bodyLarge
                 )

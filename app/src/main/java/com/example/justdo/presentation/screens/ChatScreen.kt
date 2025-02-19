@@ -1,10 +1,12 @@
 package com.example.justdo.presentation.screens
 
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -14,280 +16,242 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.justdo.data.models.Chat
 import com.example.justdo.data.models.Message
-import java.text.SimpleDateFormat
-import java.util.*
-import com.example.justdo.data.repository.MessengerRepository
-import com.example.justdo.data.models.User
-import com.example.justdo.utils.NotificationHelper
-import kotlinx.coroutines.delay
+import com.example.justdo.data.repository.ChatRepository
+import com.example.justdo.presentation.ChatListViewModel
+import com.example.justdo.services.MessageHandler
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FieldValue
+import com.google.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.launch
-import androidx.compose.runtime.remember
-import androidx.compose.ui.platform.LocalContext
-
-sealed class ChatItem {
-    data class MessageItem(val message: Message) : ChatItem()
-    data class DateHeader(val date: String) : ChatItem()
-}
+import kotlinx.coroutines.tasks.await
+import com.google.firebase.firestore.Query
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ChatScreen(user: User?, onBack: () -> Unit) {
-    val context = LocalContext.current
-    var messageText by remember { mutableStateOf("") }
-    var messages by remember { mutableStateOf(listOf<Message>()) }
-    val lazyListState = rememberLazyListState()
-    val scope = rememberCoroutineScope()
-    val timeFormatter = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
-    val dateFormatter = remember { SimpleDateFormat("d MMMM yyyy", Locale.getDefault()) }
-    val snackbarHostState = remember { SnackbarHostState() }
-    var isLoading by remember { mutableStateOf(false) }
-    val notificationHelper = remember { NotificationHelper(context) }
-    var lastProcessedMessageId by remember { mutableStateOf("") }
-    var isSending by remember { mutableStateOf(false) }
+fun ChatScreen(
+    viewModel: ChatListViewModel,
+    chat: Chat,
+    onBack: () -> Unit,
+    chatRepository: ChatRepository = ChatRepository()
+    ) {
+        var messageText by remember { mutableStateOf("") }
+        val listState = rememberLazyListState()
+        val scope = rememberCoroutineScope()
+        val currentUserId = FirebaseAuth.getInstance().currentUser?.uid ?: ""
+        val snackbarHostState = remember { SnackbarHostState() }
+        var isLoading by remember { mutableStateOf(true) }
+        val chatRepository = remember { ChatRepository() }
 
-    // Группировка сообщений по датам
-    val chatItems = remember(messages) {
-        messages
-            .sortedBy { it.timestamp }
-            .groupBy {
-                Calendar.getInstance().apply {
-                    timeInMillis = it.timestamp
-                    set(Calendar.HOUR_OF_DAY, 0)
-                    set(Calendar.MINUTE, 0)
-                    set(Calendar.SECOND, 0)
-                    set(Calendar.MILLISECOND, 0)
-                }.timeInMillis
-            }
-            .flatMap { (date, messagesForDate) ->
-                listOf(ChatItem.DateHeader(dateFormatter.format(Date(date)))) +
-                        messagesForDate.map { ChatItem.MessageItem(it) }
-            }
-    }
+        // Предотвращаем множественные подписки
+        var hasSubscribed by remember { mutableStateOf(false) }
 
-    // Загружаем сообщения каждые 5 секунд
-    LaunchedEffect(user?.id) {
-        val repository = MessengerRepository(context)
+        // Получаем сообщения
+        var messages by remember { mutableStateOf<List<Message>>(emptyList()) }
 
-        while (true) {
-            try {
-                isLoading = messages.isEmpty()
-                if (user != null) {
-                    messages = repository.refreshMessages(user.id)
+        LaunchedEffect(chat.id) {
+            viewModel.messageHandler?.stopListeningChat(chat.id)
+            if (!hasSubscribed) {
+                hasSubscribed = true
+                isLoading = true
+                try {
+                    chatRepository.subscribeToMessages(chat.id).collect { newMessages ->
+                        messages = newMessages
+                        isLoading = false
+                    }
+                } catch (e: Exception) {
+                    isLoading = false
+                    snackbarHostState.showSnackbar("Ошибка загрузки сообщений")
                 }
-            } catch (e: Exception) {
-                snackbarHostState.showSnackbar(
-                    message = e.message ?: "Ошибка загрузки сообщений"
-                )
-            } finally {
-                isLoading = false
-            }
-            delay(5000)
-        }
-    }
-
-    // Прокрутка к последнему сообщению
-    LaunchedEffect(messages.size) {
-        if (messages.isNotEmpty()) {
-            lazyListState.animateScrollToItem(messages.size - 1)
-        }
-    }
-
-    // Обработка новых сообщений для уведомлений
-    LaunchedEffect(messages) {
-        for (message in messages) {
-            if (!message.isFromMe &&
-                message.id != lastProcessedMessageId &&
-                message.timestamp > System.currentTimeMillis() - 10000
-            ) {
-                //notificationHelper.showMessageNotification(message, user?.name ?: "")
-                lastProcessedMessageId = message.id
             }
         }
-    }
 
-    // Очистка при уничтожении
-    DisposableEffect(key1 = user?.id) {
+    DisposableEffect(chat.id) {
         onDispose {
-            notificationHelper.cancelAllNotifications()
+            // При выходе - возобновляем прослушку
+            viewModel.messageHandler?.startListeningChat(chat)
         }
     }
 
-    Scaffold(
-        snackbarHost = { SnackbarHost(snackbarHostState) },
-        topBar = {
-            TopAppBar(
-                title = { Text(text = user?.name ?: "") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back"
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = {
+                        Text(
+                            chat.name,
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontWeight = FontWeight.Bold
+                            )
                         )
-                    }
-                }
-            )
-        }
-    ) { paddingValues ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .background(MaterialTheme.colorScheme.background)
-        ) {
-            if (isLoading && messages.isEmpty()) {
-                LinearProgressIndicator(
-                    modifier = Modifier.fillMaxWidth()
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Назад",
+                                tint = Color(0xFFD32F2F)
+                            )
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Transparent
+                    )
                 )
-            }
-
-            LazyColumn(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                state = lazyListState,
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(chatItems) { item ->
-                    when (item) {
-                        is ChatItem.DateHeader -> DateHeader(date = item.date)
-                        is ChatItem.MessageItem -> ChatMessage(
-                            message = item.message,
-                            dateFormatter = timeFormatter
-                        )
-                    }
-                }
-            }
-
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surface)
-                    .padding(16.dp)
-            ) {
+            },
+            bottomBar = {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(
+                                    Color(0xFFD32F2F).copy(alpha = 0.1f),
+                                    Color(0xFFF44336).copy(alpha = 0.1f)
+                                )
+                            )
+                        )
+                        .padding(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    OutlinedTextField(
+                    TextField(
                         value = messageText,
                         onValueChange = { messageText = it },
-                        placeholder = { Text("Введите сообщение...") },
                         modifier = Modifier
                             .weight(1f)
                             .padding(end = 8.dp),
-                        maxLines = 3
+                        placeholder = { Text("Сообщение...") },
+                        shape = RoundedCornerShape(24.dp),
+                        colors = TextFieldDefaults.colors(
+                            unfocusedContainerColor = Color.White,
+                            focusedContainerColor = Color.White,
+                            unfocusedIndicatorColor = Color.Transparent,
+                            focusedIndicatorColor = Color.Transparent
+                        )
                     )
                     IconButton(
                         onClick = {
-
-                            if (messageText.isNotBlank() && !isSending) {
-                                isSending = true
-
-                                val newMessage = Message(
-                                    id = UUID.randomUUID().toString(),
-                                    content = messageText,
-                                    isFromMe = true,
-                                    timestamp = System.currentTimeMillis()
-                                )
-                                messages = messages + newMessage
-                                val messageToSend = messageText
-                                messageText = ""
-
+                            if (messageText.isNotBlank()) {
                                 scope.launch {
                                     try {
-                                        user?.id?.let { userId ->
-                                            MessengerRepository(context).sendMessage(userId, messageToSend)
-                                        }
+                                        chatRepository.sendMessage(chat, messageText, viewModel)
+                                        messageText = ""
                                     } catch (e: Exception) {
-                                        // Удаляем сообщение в случае ошибки
-                                        messages = messages.filterNot { it.id == newMessage.id }
-                                        snackbarHostState.showSnackbar(
-                                            message = e.message ?: "Ошибка отправки сообщения"
-                                        )
-                                    } finally {
-                                        isSending = false
+                                        snackbarHostState.showSnackbar("Ошибка отправки сообщения")
                                     }
                                 }
                             }
-                        }, enabled = !isSending && messageText.isNotBlank()
+                        },
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFFD32F2F))
                     ) {
-                        if (isSending) {
-                            CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                        } else {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.Send,
-                                contentDescription = "Send message"
+                        Icon(
+                            Icons.AutoMirrored.Filled.Send,
+                            contentDescription = "Отправить",
+                            tint = Color.White
+                        )
+                    }
+                }
+            },
+            snackbarHost = { SnackbarHost(snackbarHostState) }
+        ) { paddingValues ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color(0xFFD32F2F).copy(alpha = 0.1f),
+                                Color(0xFFF44336).copy(alpha = 0.1f)
                             )
+                        )
+                    )
+            ) {
+                if (isLoading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .size(48.dp),
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(paddingValues)
+                            .padding(horizontal = 16.dp),
+                        state = listState,
+                        reverseLayout = true
+                    ) {
+                        items(messages) { message ->
+                            MessageItem(
+                                viewModel = viewModel,
+                                chatId = chat.id,
+                                message = message,
+                                isCurrentUser = message.senderId == currentUserId,
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
                         }
+
                     }
                 }
             }
         }
+
+        // Очистка при уничтожении
+        DisposableEffect(chat.id) {
+            onDispose {
+                hasSubscribed = false
+            }
+        }
+
     }
+
+fun getChatId(userId1: String, userId2: String): String {
+    return if (userId1 < userId2) "${userId1}_${userId2}" else "${userId2}_${userId1}"
 }
 
 @Composable
-fun DateHeader(date: String) {
+fun MessageItem(viewModel: ChatListViewModel, chatId: String, message: Message, isCurrentUser: Boolean) {
+
+    LaunchedEffect(Unit) {
+        viewModel.markMessageAsRead(chatId, message.id)
+    }
+
     Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp)
-    ) {
-        Text(
-            text = date,
-            modifier = Modifier
-                .align(Alignment.Center)
-                .clip(RoundedCornerShape(16.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant)
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center
-        )
-    }
-}
-
-@Composable
-fun ChatMessage(
-    message: Message,
-    dateFormatter: SimpleDateFormat
-) {
-    Column(
         modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = if (message.isFromMe) Alignment.End else Alignment.Start
+        contentAlignment = if (isCurrentUser) Alignment.CenterEnd else Alignment.CenterStart
     ) {
-        Box(
-            modifier = Modifier
-                .clip(
-                    RoundedCornerShape(
-                        topStart = 16.dp,
-                        topEnd = 16.dp,
-                        bottomStart = if (message.isFromMe) 16.dp else 4.dp,
-                        bottomEnd = if (message.isFromMe) 4.dp else 16.dp
-                    )
-                )
-                .background(
-                    if (message.isFromMe) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.secondaryContainer
-                )
-                .padding(12.dp)
+        Card(
+            modifier = Modifier.widthIn(max = 300.dp),
+            shape = RoundedCornerShape(
+                topStart = if (isCurrentUser) 16.dp else 4.dp,
+                topEnd = if (isCurrentUser) 4.dp else 16.dp,
+                bottomStart = 16.dp,
+                bottomEnd = 16.dp
+            ),
+            colors = CardDefaults.cardColors(
+                containerColor = if (isCurrentUser)
+                    MaterialTheme.colorScheme.primary.copy(alpha = 0.9f)
+                else
+                    MaterialTheme.colorScheme.surfaceVariant
+            )
         ) {
             Text(
-                text = message.content,
-                color = if (message.isFromMe)
-                    MaterialTheme.colorScheme.onPrimary
-                else
-                    MaterialTheme.colorScheme.onSecondaryContainer
+                text = message.text,
+                modifier = Modifier.padding(12.dp),
+                color = if (isCurrentUser) Color.White else MaterialTheme.colorScheme.onSurface,
+                style = MaterialTheme.typography.bodyMedium
             )
         }
-        Text(
-            text = dateFormatter.format(Date(message.timestamp)),
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.padding(4.dp)
-        )
     }
 }

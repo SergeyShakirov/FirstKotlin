@@ -1,5 +1,7 @@
 package com.example.justdo.data.repository
 
+import android.util.Log
+import com.example.justdo.data.models.Chat
 import com.example.justdo.data.models.User
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
@@ -23,12 +25,11 @@ class AuthRepository(
             val authResult = auth.createUserWithEmailAndPassword(email, password).await()
             val firebaseUser = authResult.user ?: throw Exception("Не удалось создать пользователя")
 
-            // Создание профиля пользователя в Firestore
-            val userProfile = hashMapOf(
-                "uid" to firebaseUser.uid,
-                "email" to email,
-                "username" to username,
-                "createdAt" to FieldValue.serverTimestamp()
+            val userProfile = User(
+                id = firebaseUser.uid,
+                email = email,
+                username = username,
+                chats = emptyList()
             )
 
             firestore.collection("users")
@@ -36,13 +37,7 @@ class AuthRepository(
                 .set(userProfile)
                 .await()
 
-            Result.success(
-                User(
-                    id = firebaseUser.uid,
-                    name = username,
-                    email = email
-                )
-            )
+            Result.success(userProfile)
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -54,40 +49,39 @@ class AuthRepository(
             val authResult = auth.signInWithEmailAndPassword(email, password).await()
             val firebaseUser = authResult.user ?: throw Exception("Не удалось войти")
 
-            // Получаем данные пользователя из Firestore
             val userSnapshot = firestore.collection("users")
                 .document(firebaseUser.uid)
                 .get()
                 .await()
 
-            val username = userSnapshot.getString("username") ?: email
+            val user = userSnapshot.toObject(User::class.java)
+                ?: throw Exception("Данные пользователя не найдены")
 
-            Result.success(
-                User(
-                    id = firebaseUser.uid,
-                    name = username,
-                    email = email
-                )
-            )
+            Result.success(user)
         } catch (e: Exception) {
             Result.failure(e)
         }
     }
 
-    // Выход
+    // Выход из системы
     fun logout() {
         auth.signOut()
     }
 
-    // Проверка авторизации
-    fun getCurrentUser(): User? {
-        val firebaseUser = auth.currentUser
-        return firebaseUser?.let {
-            User(
-                id = it.uid,
-                name = it.displayName ?: "",
-                email = it.email ?: ""
-            )
+    // Получение текущего пользователя
+    suspend fun getCurrentUser(): User? {
+        try {
+            val firebaseUser = auth.currentUser ?: return null
+
+            val userDoc = firestore.collection("users")
+                .document(firebaseUser.uid)
+                .get()
+                .await()
+
+            return userDoc.toObject(User::class.java)
+        } catch (e: Exception) {
+            Log.e("getCurrentUser", "Ошибка при получении текущего пользователя", e)
+            return null
         }
     }
 }

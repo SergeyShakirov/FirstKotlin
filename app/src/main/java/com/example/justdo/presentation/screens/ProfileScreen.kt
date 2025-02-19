@@ -21,8 +21,7 @@ import com.example.justdo.data.models.User
 @Composable
 fun ProfileScreen(
     user: User?,
-    onLogout: () -> Unit,
-    onCreateProduct: (User) -> Unit
+    onLogout: () -> Unit
 ) {
     Scaffold(
         topBar = {
@@ -75,43 +74,18 @@ fun ProfileScreen(
 
             // Имя пользователя
             Text(
-                text = user?.name ?: "Гость",
+                text = user?.username ?: "Гость",
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold
             )
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            //Spacer(modifier = Modifier.height(32.dp))
-
-            // Список информации о профиле
             ProfileInfoItem(
                 icon = Icons.Default.Person,
                 title = "Имя",
-                value = user?.name ?: "Не указано"
+                value = user?.username ?: "Не указано"
             )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Button(
-                onClick = {
-                    user?.let { onCreateProduct(it) }
-                },
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-                ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 16.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Add,
-                    contentDescription = null,
-                    modifier = Modifier.padding(end = 8.dp)
-                )
-                Text("Создать товар")
-            }
         }
     }
 }

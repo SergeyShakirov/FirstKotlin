@@ -125,13 +125,9 @@ fun AnimatedLogo() {
         contentAlignment = Alignment.Center
     ) {
         Text(
-            "GM",
+            "gogo",
             style = MaterialTheme.typography.headlineLarge,
             color = MaterialTheme.colorScheme.onPrimary
         )
     }
-}
-
-private object Color {
-    val Transparent = androidx.compose.ui.graphics.Color.Transparent
 }

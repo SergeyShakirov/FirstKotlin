@@ -146,3 +146,22 @@ private fun FloatingParticle(state: ParticleState, color: Color) {
             .background(color.copy(alpha = alpha))
     )
 }
+
+@Composable
+fun GradientBackground(content: @Composable () -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                brush = Brush.verticalGradient(
+                    colors = listOf(
+                        Color(0xFFFF9A9E),  // Светло-розовый
+                        Color(0xFFFAD0C4),  // Персиковый
+                        Color(0xFFFFFAFA)   // Почти белый
+                    )
+                )
+            )
+    ) {
+        content()
+    }
+}

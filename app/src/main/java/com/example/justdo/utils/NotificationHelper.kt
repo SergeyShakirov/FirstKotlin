@@ -1,133 +1,114 @@
 package com.example.justdo.utils
 
-import android.app.Notification
+import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.graphics.Color
+import android.content.pm.PackageManager
 import android.os.Build
-import androidx.annotation.RequiresApi
+import android.util.Log
+import androidx.activity.result.ActivityResultLauncher
 import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import com.example.justdo.MainActivity
 import com.example.justdo.R
+import com.example.justdo.navigation.Screen
 
 class NotificationHelper(private val context: Context) {
 
-    companion object {
-        const val CHANNEL_GENERAL = "general_channel"
-        const val CHANNEL_IMPORTANT = "important_channel"
-        const val CHANNEL_MARKETING = "marketing_channel"
+    init {
+        createNotificationChannel()
     }
 
-    fun ensureNotificationChannelsExist() {
+    fun hasNotificationPermission(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+        } else {
+            true
+        }
+    }
+
+    private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val notificationManager = context.getSystemService(NotificationManager::class.java)
-
-            // Проверяем и создаем важный канал
-            if (notificationManager.getNotificationChannel(CHANNEL_IMPORTANT) == null) {
-                createImportantChannel(notificationManager)
+            val channel = NotificationChannel(
+                CHANNEL_ID,
+                "Messages",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Chat messages notifications"
             }
+            val notificationManager =
+                context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            notificationManager.createNotificationChannel(channel)
+        }
+    }
 
-            // Проверяем и создаем общий канал
-            if (notificationManager.getNotificationChannel(CHANNEL_GENERAL) == null) {
-                createGeneralChannel(notificationManager)
+    fun requestNotificationPermission(permissionLauncher: ActivityResultLauncher<String>) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (!hasNotificationPermission()) {
+                permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
             }
-
-            // Проверяем и создаем маркетинговый канал
-            if (notificationManager.getNotificationChannel(CHANNEL_MARKETING) == null) {
-                createMarketingChannel(notificationManager)
-            }
         }
     }
 
-    @RequiresApi(Build.VERSION_CODES.O)
-    private fun createImportantChannel(notificationManager: NotificationManager) {
-        val channelImportant = NotificationChannel(
-            CHANNEL_IMPORTANT,
-            "Важные уведомления",
-            NotificationManager.IMPORTANCE_HIGH
-        ).apply {
-            description = "Срочные и важные уведомления"
-            enableLights(true)
-            lightColor = Color.RED
-            enableVibration(true)
-            vibrationPattern = longArrayOf(100, 200, 300, 400)
-            setShowBadge(true)
-            lockscreenVisibility = Notification.VISIBILITY_PUBLIC
-        }
-        notificationManager.createNotificationChannel(channelImportant)
-    }
-
-    @RequiresApi(Build.VERSION_CODES.O)
-    private fun createGeneralChannel(notificationManager: NotificationManager) {
-        val channelGeneral = NotificationChannel(
-            CHANNEL_GENERAL,
-            "Общие уведомления",
-            NotificationManager.IMPORTANCE_DEFAULT
-        ).apply {
-            description = "Общие уведомления приложения"
-            setShowBadge(true)
-            lockscreenVisibility = Notification.VISIBILITY_PRIVATE
-        }
-        notificationManager.createNotificationChannel(channelGeneral)
-    }
-
-    @RequiresApi(Build.VERSION_CODES.O)
-    private fun createMarketingChannel(notificationManager: NotificationManager) {
-        val channelMarketing = NotificationChannel(
-            CHANNEL_MARKETING,
-            "Маркетинговые уведомления",
-            NotificationManager.IMPORTANCE_LOW
-        ).apply {
-            description = "Новости и специальные предложения"
-            setShowBadge(false)
-            lockscreenVisibility = Notification.VISIBILITY_PRIVATE
-        }
-        notificationManager.createNotificationChannel(channelMarketing)
-    }
-
-    fun sendNotification(
-        channelId: String,
-        title: String,
+    fun showMessageNotification(
+        senderId: String,
+        senderName: String,
         message: String,
-        notificationId: Int
+        chatId: String
     ) {
-        val intent = Intent(context, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        // Проверяем разрешения для Android 13+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val hasPermission = ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+
+            if (!hasPermission) {
+                Log.d(TAG, "Нет разрешения на отправку уведомлений")
+                return
+            }
         }
 
-        val pendingIntent = PendingIntent.getActivity(
-            context,
-            0,
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
+        try {
+            val intent = Intent(context, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                putExtra("chat_id", chatId)
+            }
 
-        val notification = NotificationCompat.Builder(context, channelId)
-            .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle(title)
-            .setContentText(message)
-            .setPriority(getPriorityForChannel(channelId))
-            .setAutoCancel(true)
-            .setContentIntent(pendingIntent)
-            .build()
+            val pendingIntent = PendingIntent.getActivity(
+                context,
+                chatId.hashCode(),
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
 
-        val notificationManager = context.getSystemService(NotificationManager::class.java)
-        notificationManager.notify(notificationId, notification)
-    }
+            val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+                .setSmallIcon(R.drawable.ic_notification)
+                .setContentTitle(senderName)
+                .setContentText(message)
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setAutoCancel(true)
+                .setContentIntent(pendingIntent)
+                .build()
 
-    private fun getPriorityForChannel(channelId: String): Int {
-        return when (channelId) {
-            CHANNEL_IMPORTANT -> NotificationCompat.PRIORITY_HIGH
-            CHANNEL_GENERAL -> NotificationCompat.PRIORITY_DEFAULT
-            CHANNEL_MARKETING -> NotificationCompat.PRIORITY_LOW
-            else -> NotificationCompat.PRIORITY_DEFAULT
+            NotificationManagerCompat.from(context)
+                .notify(chatId.hashCode(), notification)
+
+            Log.d(TAG, "Уведомление показано: $message от $senderName")
+        } catch (e: Exception) {
+            Log.e(TAG, "Ошибка при показе уведомления", e)
         }
     }
 
-    fun cancelAllNotifications() {
-        TODO("Not yet implemented")
+    companion object {
+        private const val TAG = "NotificationHelper"
+        private const val CHANNEL_ID = "messages_channel"
     }
 }
