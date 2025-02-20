@@ -15,7 +15,7 @@
         android:theme="@style/Theme.JustDo"
         tools:targetApi="tiramisu">
         <activity
-            android:name=".MainActivity"
+            android:name="com.example.justdo.MainActivity"
             android:exported="true"
             android:theme="@style/Theme.JustDo">
             <intent-filter>

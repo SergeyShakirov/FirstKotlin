@@ -1,6 +1,5 @@
 package com.example.justdo.presentation.screens
 
-import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -19,21 +18,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import com.example.justdo.data.models.Chat
 import com.example.justdo.data.models.Message
 import com.example.justdo.data.repository.ChatRepository
 import com.example.justdo.presentation.ChatListViewModel
-import com.example.justdo.services.MessageHandler
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FieldValue
-import com.google.firebase.firestore.FirebaseFirestore
-import kotlinx.coroutines.channels.awaitClose
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.tasks.await
-import com.google.firebase.firestore.Query
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -106,61 +98,24 @@ fun ChatScreen(
                     )
                 )
             },
+            // Redesigned message input section with red-white style and borderless design
             bottomBar = {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(
-                            Brush.verticalGradient(
-                                colors = listOf(
-                                    Color(0xFFD32F2F).copy(alpha = 0.1f),
-                                    Color(0xFFF44336).copy(alpha = 0.1f)
-                                )
-                            )
-                        )
-                        .padding(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    TextField(
-                        value = messageText,
-                        onValueChange = { messageText = it },
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(end = 8.dp),
-                        placeholder = { Text("Сообщение...") },
-                        shape = RoundedCornerShape(24.dp),
-                        colors = TextFieldDefaults.colors(
-                            unfocusedContainerColor = Color.White,
-                            focusedContainerColor = Color.White,
-                            unfocusedIndicatorColor = Color.Transparent,
-                            focusedIndicatorColor = Color.Transparent
-                        )
-                    )
-                    IconButton(
-                        onClick = {
-                            if (messageText.isNotBlank()) {
-                                scope.launch {
-                                    try {
-                                        chatRepository.sendMessage(chat, messageText, viewModel)
-                                        messageText = ""
-                                    } catch (e: Exception) {
-                                        snackbarHostState.showSnackbar("Ошибка отправки сообщения")
-                                    }
+                TelegramStyleChatInput(
+                    value = messageText,
+                    onValueChange = { messageText = it },
+                    onSendMessage = {
+                        if (messageText.isNotBlank()) {
+                            scope.launch {
+                                try {
+                                    chatRepository.sendMessage(chat, messageText, viewModel)
+                                    messageText = ""
+                                } catch (e: Exception) {
+                                    snackbarHostState.showSnackbar("Ошибка отправки сообщения")
                                 }
                             }
-                        },
-                        modifier = Modifier
-                            .size(48.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFFD32F2F))
-                    ) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.Send,
-                            contentDescription = "Отправить",
-                            tint = Color.White
-                        )
+                        }
                     }
-                }
+                )
             },
             snackbarHost = { SnackbarHost(snackbarHostState) }
         ) { paddingValues ->
@@ -199,7 +154,7 @@ fun ChatScreen(
                                 message = message,
                                 isCurrentUser = message.senderId == currentUserId,
                             )
-                            Spacer(modifier = Modifier.height(8.dp))
+                            //Spacer(modifier = Modifier.height(8.dp))
                         }
 
                     }
@@ -224,7 +179,9 @@ fun MessageItem(viewModel: ChatListViewModel, chatId: String, message: Message, 
     }
 
     Box(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 8.dp),
         contentAlignment = if (isCurrentUser) Alignment.CenterEnd else Alignment.CenterStart
     ) {
         Card(

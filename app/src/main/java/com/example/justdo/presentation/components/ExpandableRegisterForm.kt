@@ -1,7 +1,6 @@
 package com.example.justdo.presentation.components
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.*
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -13,10 +12,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.example.justdo.data.models.User
-import com.example.justdo.data.repository.AuthRepository
-import com.example.justdo.presentation.components.AnimatedButton
-import kotlinx.coroutines.launch
 
 @Composable
 fun ExpandableRegisterForm(

@@ -12,7 +12,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
 import com.google.firebase.Timestamp
-import com.google.firebase.firestore.SetOptions
 
 class ChatRepository {
     private val firestore = FirebaseFirestore.getInstance()

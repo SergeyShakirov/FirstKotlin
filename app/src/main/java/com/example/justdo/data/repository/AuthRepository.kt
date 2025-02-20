@@ -1,10 +1,8 @@
 package com.example.justdo.data.repository
 
 import android.util.Log
-import com.example.justdo.data.models.Chat
 import com.example.justdo.data.models.User
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await

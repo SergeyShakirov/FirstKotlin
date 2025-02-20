@@ -15,7 +15,6 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.example.justdo.MainActivity
 import com.example.justdo.R
-import com.example.justdo.navigation.Screen
 
 class NotificationHelper(private val context: Context) {
 

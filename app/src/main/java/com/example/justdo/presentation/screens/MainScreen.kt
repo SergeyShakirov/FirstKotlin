@@ -5,24 +5,15 @@ import android.app.Activity
 import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountCircle
-import androidx.compose.material.icons.filled.Person
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.*
 import com.example.justdo.data.models.Chat
@@ -35,6 +26,7 @@ import com.example.justdo.services.MessageHandler
 import com.example.justdo.utils.NotificationHelper
 import kotlinx.coroutines.flow.first
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun MyApp(
     repository: AuthRepository,
@@ -57,6 +49,8 @@ fun MyApp(
     var messageHandler by remember { mutableStateOf<MessageHandler?>(null) }
     val notificationHelper = remember { NotificationHelper(context) }
     val chatId = remember { activity?.intent?.getStringExtra("chat_id") }
+
+    val pagerState = rememberPagerState(pageCount = { 2 })
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -99,6 +93,17 @@ fun MyApp(
         }
     }
 
+    LaunchedEffect(pagerState.currentPage) {
+        when (pagerState.currentPage) {
+            0 -> navController.navigate(Screen.Chats.route) {
+                popUpTo(Screen.Chats.route) { inclusive = true }
+            }
+            1 -> navController.navigate(Screen.Profile.route) {
+                popUpTo(Screen.Profile.route) { inclusive = true }
+            }
+        }
+    }
+
     DisposableEffect(Unit) {
         onDispose {
             messageHandler?.stopListening()
@@ -107,115 +112,6 @@ fun MyApp(
     }
 
     Scaffold(
-        bottomBar = {
-            currentUser?.let {
-                Surface(
-                    modifier = Modifier
-                        .padding(horizontal = 24.dp, vertical = 12.dp)
-                        .clip(RoundedCornerShape(24.dp)),
-                    color = Color.White,
-                    shadowElevation = 4.dp
-                ) {
-                    NavigationBar(
-                        containerColor = Color.White,
-                        tonalElevation = 0.dp,
-                        modifier = Modifier.height(64.dp)
-                    ) {
-                        val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
-
-                        NavigationBarItem(
-                            icon = {
-                                Box(
-                                    modifier = Modifier
-                                        .size(32.dp)
-                                        .clip(CircleShape)
-                                        .background(
-                                            if (currentRoute == Screen.Chats.route)
-                                                Color(0xFFD32F2F).copy(alpha = 0.1f)
-                                            else
-                                                Color.Transparent
-                                        ),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        Icons.Default.Person,
-                                        contentDescription = "Чаты",
-                                        tint = if (currentRoute == Screen.Chats.route)
-                                            Color(0xFFD32F2F) else Color.Gray,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
-                            },
-                            label = {
-                                Text(
-                                    "Чаты",
-                                    color = if (currentRoute == Screen.Chats.route)
-                                        Color(0xFFD32F2F) else Color.Gray
-                                )
-                            },
-                            selected = currentRoute == Screen.Chats.route,
-                            onClick = {
-                                if (currentRoute != Screen.Chats.route) {
-                                    navController.navigate(Screen.Chats.route) {
-                                        popUpTo(Screen.Chats.route) { inclusive = true }
-                                    }
-                                }
-                            },
-                            colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = Color(0xFFD32F2F),
-                                unselectedIconColor = Color.Gray,
-                                indicatorColor = Color.Transparent
-                            )
-                        )
-
-                        NavigationBarItem(
-                            icon = {
-                                Box(
-                                    modifier = Modifier
-                                        .size(32.dp)
-                                        .clip(CircleShape)
-                                        .background(
-                                            if (currentRoute == Screen.Profile.route)
-                                                Color(0xFFD32F2F).copy(alpha = 0.1f)
-                                            else
-                                                Color.Transparent
-                                        ),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        Icons.Default.AccountCircle,
-                                        contentDescription = "Профиль",
-                                        tint = if (currentRoute == Screen.Profile.route)
-                                            Color(0xFFD32F2F) else Color.Gray,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
-                            },
-                            label = {
-                                Text(
-                                    "Профиль",
-                                    color = if (currentRoute == Screen.Profile.route)
-                                        Color(0xFFD32F2F) else Color.Gray
-                                )
-                            },
-                            selected = currentRoute == Screen.Profile.route,
-                            onClick = {
-                                if (currentRoute != Screen.Profile.route) {
-                                    navController.navigate(Screen.Profile.route) {
-                                        popUpTo(Screen.Profile.route) { inclusive = true }
-                                    }
-                                }
-                            },
-                            colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = Color(0xFFD32F2F),
-                                unselectedIconColor = Color.Gray,
-                                indicatorColor = Color.Transparent
-                            )
-                        )
-                    }
-                }
-            }
-        },
         containerColor = Color.White,
         snackbarHost = {
             SnackbarHost(snackbarHostState) { data ->
@@ -289,19 +185,39 @@ fun MyApp(
             }
 
             composable(Screen.Chats.route) {
-                ChatList(
-                    chats = chats,
-                    onChatClicked = { chat ->
-                        scope.launch {
-                            viewModel.setCurrentChat(chat)
-                            navController.navigate(Screen.Chat.route)
-                        }
-                    },
-                    onAddClicked = {
-                        navController.navigate(Screen.Users.route)
-                    },
-                    viewModel = viewModel
-                )
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier.fillMaxSize()
+                ) { page ->
+                    when (page) {
+                        0 -> ChatList(
+                            chats = chats,
+                            onChatClicked = { chat ->
+                                scope.launch {
+                                    viewModel.setCurrentChat(chat)
+                                    navController.navigate(Screen.Chat.route)
+                                }
+                            },
+                            onAddClicked = {
+                                navController.navigate(Screen.Users.route)
+                            },
+                            viewModel = viewModel
+                        )
+                        1 -> ProfileScreen(
+                            user = currentUser,
+                            onLogout = {
+                                scope.launch {
+                                    repository.logout()
+                                    viewModel.logout()
+                                    isAuthenticated = false
+                                    navController.navigate("login") {
+                                        popUpTo(0)
+                                    }
+                                }
+                            }
+                        )
+                    }
+                }
             }
 
             composable(Screen.Chat.route) {
@@ -317,19 +233,39 @@ fun MyApp(
             }
 
             composable(Screen.Profile.route) {
-                ProfileScreen(
-                    user = currentUser,
-                    onLogout = {
-                        scope.launch {
-                            repository.logout()
-                            viewModel.logout()
-                            isAuthenticated = false
-                            navController.navigate("login") {
-                                popUpTo(0)
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier.fillMaxSize()
+                ) { page ->
+                    when (page) {
+                        0 -> ChatList(
+                            chats = chats,
+                            onChatClicked = { chat ->
+                                scope.launch {
+                                    viewModel.setCurrentChat(chat)
+                                    navController.navigate(Screen.Chat.route)
+                                }
+                            },
+                            onAddClicked = {
+                                navController.navigate(Screen.Users.route)
+                            },
+                            viewModel = viewModel
+                        )
+                        1 -> ProfileScreen(
+                            user = currentUser,
+                            onLogout = {
+                                scope.launch {
+                                    repository.logout()
+                                    viewModel.logout()
+                                    isAuthenticated = false
+                                    navController.navigate("login") {
+                                        popUpTo(0)
+                                    }
+                                }
                             }
-                        }
+                        )
                     }
-                )
+                }
             }
         }
     }
