@@ -28,7 +28,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
-fun LoginScreen(isLoading: Boolean,
+fun LoginScreen(
+    isLoading: Boolean,
     repository: AuthRepository,
     onLoginSuccess: (User) -> Unit,
 ) {
@@ -68,21 +69,28 @@ fun LoginScreen(isLoading: Boolean,
                 .background(redWhiteColorScheme.background)
         ) {
             AnimatedBackground()
-
-            AnimatedVisibility(
-                visible = isVisible,
-                enter = fadeIn(initialAlpha = 0f),
-                exit = fadeOut()
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(16.dp)
-                        .graphicsLayer {
-                            if (showError) {
-                                translationX = (Math.random() * 20 - 10).toFloat()
-                            }
-                        },
+            if (isLoading) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    AnimatedLogo()
+                }
+            } else {
+                AnimatedVisibility(
+                    visible = isVisible,
+                    enter = fadeIn(initialAlpha = 0f),
+                    exit = fadeOut()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(16.dp)
+                            .graphicsLayer {
+                                if (showError) {
+                                    translationX = (Math.random() * 20 - 10).toFloat()
+                                }
+                            },
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
                 ) {
@@ -238,11 +246,11 @@ fun LoginScreen(isLoading: Boolean,
                         }
                     }
                 }
-            }
+            }}
 
             // Loader с красным акцентом
             AnimatedVisibility(
-                visible = isLoading,
+                visible = false,
                 enter = scaleIn(initialScale = 0.8f) + fadeIn(initialAlpha = 0f),
                 exit = scaleOut(targetScale = 0.8f) + fadeOut()
             ) {

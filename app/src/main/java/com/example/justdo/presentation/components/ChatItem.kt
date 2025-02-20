@@ -46,7 +46,8 @@ fun ChatItem(
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioMediumBouncy,
             stiffness = Spring.StiffnessMedium
-        ), label = ""
+        ),
+        label = ""
     )
 
     Card(
@@ -60,13 +61,15 @@ fun ChatItem(
                     isPressed = false
                 }
             ),
-        shape = RoundedCornerShape(12.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color.White.copy(alpha = 0.9f)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(MaterialTheme.colorScheme.surfaceVariant)
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -74,7 +77,7 @@ fun ChatItem(
                 modifier = Modifier
                     .size(45.dp)
                     .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primary),
+                    .background(Color(0xFFD32F2F)),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
@@ -90,15 +93,18 @@ fun ChatItem(
             Column {
                 Text(
                     text = chat.name.ifEmpty { "Новый чат" },
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        color = Color.Black,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp
+                    )
                 )
                 Text(
                     text = chat.lastMessage.ifEmpty { "Нет сообщений" },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 14.sp,
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        color = Color.Gray,
+                        fontSize = 14.sp
+                    ),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
