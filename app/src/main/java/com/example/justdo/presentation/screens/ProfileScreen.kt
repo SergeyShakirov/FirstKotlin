@@ -1,6 +1,10 @@
 package com.example.justdo.presentation.screens
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -15,16 +19,35 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.example.justdo.data.models.User
+import com.example.justdo.domain.models.UploadState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileScreen(
     user: User?,
-    onLogout: () -> Unit
+    uploadState: UploadState = UploadState.Idle,
+    onLogout: () -> Unit,
+    onAvatarSelected: (Uri) -> Unit
 ) {
+    var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
+    val context = LocalContext.current
+
+    val launcher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let {
+            selectedImageUri = it
+            onAvatarSelected(it)
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -75,15 +98,45 @@ fun ProfileScreen(
                     modifier = Modifier
                         .size(120.dp)
                         .clip(CircleShape)
-                        .background(Color(0xFFD32F2F)),
+                        .background(Color(0xFFD32F2F))
+                        .clickable(enabled = uploadState !is UploadState.Loading) {
+                            launcher.launch("image/*")
+                        },
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Person,
-                        contentDescription = "Аватар профиля",
-                        modifier = Modifier.size(80.dp),
-                        tint = Color.White
-                    )
+                    if (selectedImageUri != null || user?.avatarUrl != null) {
+                        AsyncImage(
+                            model = ImageRequest.Builder(context)
+                                .data(selectedImageUri ?: user?.avatarUrl)
+                                .crossfade(true)
+                                .build(),
+                            contentDescription = "Аватар профиля",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.Person,
+                            contentDescription = "Аватар профиля",
+                            modifier = Modifier.size(80.dp),
+                            tint = Color.White
+                        )
+                    }
+
+                    // Показываем индикатор загрузки
+                    if (uploadState is UploadState.Loading) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Color.Black.copy(alpha = 0.5f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(
+                                color = Color.White,
+                                modifier = Modifier.size(48.dp)
+                            )
+                        }
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))

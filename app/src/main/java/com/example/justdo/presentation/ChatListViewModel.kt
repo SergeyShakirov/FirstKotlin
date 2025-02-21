@@ -1,5 +1,8 @@
 package com.example.justdo.presentation
 
+import android.app.Application
+import android.content.Context
+import android.net.Uri
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -7,27 +10,83 @@ import androidx.lifecycle.viewModelScope
 import com.example.justdo.data.models.Chat
 import com.example.justdo.data.models.User
 import com.example.justdo.data.repository.ChatRepository
+import com.example.justdo.data.repository.UserRepository
+import com.example.justdo.domain.models.UploadState
+import com.example.justdo.network.api.ImgurApi
+import com.example.justdo.network.constants.ImgurConfig
 import com.example.justdo.services.MessageHandler
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseAuthException
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import retrofit2.Retrofit
+import retrofit2.converter.gson.GsonConverterFactory
 import java.util.Date
 
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.toRequestBody
+import okio.IOException
+import retrofit2.Response
+import retrofit2.http.Header
+import retrofit2.http.Multipart
+import retrofit2.http.POST
+import retrofit2.http.Part
+
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.RequestBody.Companion.toRequestBody
+
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.RequestBody
+import okhttp3.RequestBody.Companion.toRequestBody
+import java.io.BufferedInputStream
+import java.io.InputStream
+
 class ChatListViewModel(
-    private val chatRepository: ChatRepository
+    private val chatRepository: ChatRepository,
+    private val userRepository: UserRepository
 ) : ViewModel() {
 
     private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance()
     private val auth: FirebaseAuth = FirebaseAuth.getInstance()
+
+    // Состояние загрузки аватара
+    private val _uploadState = MutableStateFlow<UploadState>(UploadState.Idle)
+    val uploadState = _uploadState.asStateFlow()
+
     // Заменяем предыдущее объявление на это
     var messageHandler: MessageHandler? = null
         private set  // Делаем сеттер приватным
+
+    // Добавляем Imgur API
+    private val imgurApi: ImgurApi by lazy {
+        val client = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                val original = chain.request()
+                val request = original.newBuilder()
+                    .header("Accept", "application/json")
+                    .method(original.method, original.body)
+                    .build()
+                chain.proceed(request)
+            }
+            .build()
+
+        Retrofit.Builder()
+            .baseUrl("https://api.imgur.com/")
+            .client(client)
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+            .create(ImgurApi::class.java)
+    }
 
     // Теперь используем эту функцию для установки handler's
     fun updateMessageHandler(handler: MessageHandler) {
@@ -58,6 +117,70 @@ class ChatListViewModel(
     fun markMessageAsRead(chatId: String, messageId: String) {
         viewModelScope.launch {
             messageHandler?.markMessageAsRead(chatId, messageId)
+        }
+    }
+
+    // Обновляем функцию uploadAvatar для использования Imgur
+    fun uploadAvatar(uri: Uri) {
+        viewModelScope.launch {
+            _uploadState.value = UploadState.Loading
+
+            try {
+                // Получаем context из Firebase Auth
+                val context = auth.app.applicationContext
+
+                // Читаем файл и конвертируем в ByteArray
+                val byteArray = context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                    inputStream.readBytes()
+                } ?: throw IOException("Не удалось открыть файл")
+
+                // Создаем RequestBody из ByteArray
+                val requestBody = okhttp3.RequestBody.create(
+                    "image/*".toMediaType(),
+                    byteArray
+                )
+
+                // Создаем MultipartBody.Part
+                val body = MultipartBody.Part.createFormData(
+                    "image",
+                    "photo.jpg",
+                    requestBody
+                )
+
+                // Загружаем на Imgur
+                val response = imgurApi.uploadImage(
+                    "Client-ID ${ImgurConfig.CLIENT_ID}",
+                    body
+                )
+
+                if (response.isSuccessful && response.body()?.success == true) {
+                    val imageUrl = response.body()?.data?.link
+                        ?: throw IOException("Нет ссылки на изображение")
+
+                    // Обновляем URL аватара в Firebase
+                    auth.currentUser?.uid?.let { userId ->
+                        firestore.collection("users")
+                            .document(userId)
+                            .update("avatarUrl", imageUrl)
+                            .await()
+                    }
+
+                    _uploadState.value = UploadState.Success(imageUrl)
+                    // Обновляем информацию о пользователе
+                    getCurrentUser()
+                } else {
+                    throw IOException("Ошибка загрузки: ${response.code()}")
+                }
+            } catch (e: Exception) {
+                _uploadState.value = UploadState.Error(
+                    when (e) {
+                        is FirebaseAuthException -> "Ошибка аутентификации: ${e.message}"
+                        is SecurityException -> "Ошибка доступа к файлу: ${e.message}"
+                        is IllegalArgumentException -> "Некорректный формат файла: ${e.message}"
+                        else -> "Произошла ошибка: ${e.message}"
+                    }
+                )
+            }
         }
     }
 
@@ -188,7 +311,8 @@ class ChatListViewModel(
                     if (needsUpdate[index]) {
                         // Создаем копию чата с правильным именем для каждого пользователя
                         val chatWithUpdatedName = chat.copy(
-                            name = if (index == 0) selectedUser.username else currentUser.username
+                            name = if (index == 0) selectedUser.username else currentUser.username,
+                            avatarUrl = if (index == 0) selectedUser.avatarUrl else currentUser.avatarUrl
                         )
 
                         val updatedUser = userData?.copy(
@@ -197,6 +321,7 @@ class ChatListViewModel(
                             id = if (index == 0) currentUser.id else selectedUser.id,
                             username = if (index == 0) currentUser.username else selectedUser.username,
                             email = if (index == 0) currentUser.email else selectedUser.email,
+                            avatarUrl = "",
                             chats = listOf(chat)
                         )
                         ref.set(updatedUser).await()
@@ -241,11 +366,14 @@ class ChatListViewModel(
         _chats.value = emptyList()
     }
 
-    class Factory(private val chatRepository: ChatRepository) : ViewModelProvider.Factory {
+    class Factory(
+        private val chatRepository: ChatRepository,
+        private val userRepository: UserRepository
+    ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             if (modelClass.isAssignableFrom(ChatListViewModel::class.java)) {
-                return ChatListViewModel(chatRepository) as T
+                return ChatListViewModel(chatRepository, userRepository) as T
             }
             throw IllegalArgumentException("Неизвестный класс ViewModel")
         }

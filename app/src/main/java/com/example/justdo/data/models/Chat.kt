@@ -4,5 +4,6 @@ data class Chat(
     val id: String = "",
     var name: String = "",
     val lastMessage: String = "",
-    val lastMessageTimestamp: Any? = null
+    val lastMessageTimestamp: Any? = null,
+    var avatarUrl: String? = null
 )

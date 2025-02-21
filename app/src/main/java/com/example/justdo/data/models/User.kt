@@ -4,7 +4,7 @@ data class User(
     val id: String = "",
     val username: String = "",
     val email: String = "",
-    val photoUrl: String? = null,
     var lastMessage: String = "",
-    var chats: List<Chat> = emptyList()
+    var chats: List<Chat> = emptyList(),
+    val avatarUrl: String? = null
 )

@@ -29,10 +29,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import coil.transform.CircleCropTransformation
 import com.example.justdo.data.models.Chat
 
 @Composable
@@ -73,19 +77,35 @@ fun ChatItem(
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
-                modifier = Modifier
-                    .size(45.dp)
-                    .clip(CircleShape)
-                    .background(Color(0xFFD32F2F)),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = if (chat.name.isNotEmpty()) chat.name.first().uppercase() else "?",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold
+
+            // Заменяем Box на AsyncImage с fallback на букву
+            if (chat.avatarUrl != null) {
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(chat.avatarUrl)
+                        .crossfade(true)
+                        .transformations(CircleCropTransformation())
+                        .build(),
+                    contentDescription = "Аватар пользователя ${chat.name}",
+                    modifier = Modifier
+                        .size(45.dp)
+                        .clip(CircleShape),
                 )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .size(45.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFFD32F2F)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = if (chat.name.isNotEmpty()) chat.name.first().uppercase() else "?",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.width(12.dp))

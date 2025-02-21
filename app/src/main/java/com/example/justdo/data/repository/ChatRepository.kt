@@ -119,6 +119,7 @@ class ChatRepository {
                     // Обновляем текущего пользователя
                     if (currentUserData != null) {
                         updatedChat.name = otherUserData?.username ?: ""
+                        updatedChat.avatarUrl = otherUserData?.avatarUrl ?: ""
                         val currentUserChats = currentUserData.chats.filter { it.id != chat.id } + updatedChat
                         val updatedCurrentUser = currentUserData.copy(
                             chats = currentUserChats,
@@ -131,6 +132,7 @@ class ChatRepository {
                     // Обновляем другого пользователя
                     if (otherUserData != null) {
                         updatedChat.name = currentUserData?.username ?: ""
+                        updatedChat.avatarUrl = currentUserData?.avatarUrl ?: ""
                         val otherUserChats = otherUserData.chats.filter { it.id != chat.id } + updatedChat
                         transaction.set(otherUserRef, otherUserData.copy(
                             chats = otherUserChats,
@@ -141,6 +143,7 @@ class ChatRepository {
                     // Обновляем текущего пользователя
                     if (currentUserData != null) {
                         updatedChat.name = otherUserData?.username ?: ""
+                        updatedChat.avatarUrl = otherUserData?.avatarUrl ?: ""
                         val currentUserChats = currentUserData.chats.map {
                             if (it.id == chat.id) updatedChat else it
                         }
@@ -155,6 +158,7 @@ class ChatRepository {
                     // Обновляем другого пользователя
                     if (otherUserData != null) {
                         updatedChat.name = currentUserData?.username ?: ""
+                        updatedChat.avatarUrl = currentUserData?.avatarUrl ?: ""
                         val otherUserChats = otherUserData.chats.map {
                             if (it.id == chat.id) updatedChat else it
                         }
@@ -218,6 +222,7 @@ class ChatRepository {
         return try {
             // Создаем мапу имен из исходных чатов для быстрого доступа
             val chatNames = chats.associateBy({ it.id }, { it.name })
+            val chatAvatars = chats.associateBy({ it.id }, { it.avatarUrl })
 
             val chatIds = chats.map { it.id }
             val batches = chatIds.chunked(10)
@@ -233,7 +238,8 @@ class ChatRepository {
                     doc.toObject(Chat::class.java)?.let { chat ->
                         chat.copy(
                             id = doc.id,
-                            name = chatNames[doc.id] ?: chat.name // Используем имя из исходного чата или оставляем текущее
+                            name = chatNames[doc.id] ?: chat.name, // Используем имя из исходного чата или оставляем текущее
+                            avatarUrl = chatAvatars[doc.id] ?: ""
                         )
                     }
                 }

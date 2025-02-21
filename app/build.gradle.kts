@@ -53,9 +53,9 @@ android {
 dependencies {
 
     implementation(platform(libs.firebase.bom))
-
+    implementation(libs.bundles.network)
     implementation(libs.playservices.auth)
-
+    implementation(libs.coil.compose)
     implementation(libs.firebase.analytics)
     implementation(libs.firebase.messaging)
     implementation(libs.firebase.auth)
@@ -77,6 +77,8 @@ dependencies {
     implementation(libs.androidx.datastore.core.android)
     implementation(libs.firebase.database)
     implementation(libs.androidx.work.runtime.ktx)
+    implementation(libs.volley)
+    implementation(libs.androidx.runner)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

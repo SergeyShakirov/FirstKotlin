@@ -23,12 +23,22 @@ firebaseDatabase = "21.0.0"
 workRuntimeKtx = "2.9.0"
 kotlinxCoroutinesAndroid = "1.7.3"
 workRuntimeKtxVersion = "2.10.0"
+volley = "1.2.1"
+runner = "1.6.1"
+coil = "2.4.0"
+retrofit = "2.9.0"
+okhttp = "4.12.0"
+gson = "2.10.1"
 
 [libraries]
+retrofit-core = { group = "com.squareup.retrofit2", name = "retrofit", version.ref = "retrofit" }
+retrofit-converter-gson = { group = "com.squareup.retrofit2", name = "converter-gson", version.ref = "retrofit" }
+okhttp-core = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
+okhttp-logging = { group = "com.squareup.okhttp3", name = "logging-interceptor", version.ref = "okhttp" }
+gson = { group = "com.google.code.gson", name = "gson", version.ref = "gson" }
 
 work-runtime-ktx = {group = "androidx.work", name = "work-runtime-ktx", version.ref = "workRuntimeKtx"}
 kotlinx-coroutines-android = {group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "kotlinxCoroutinesAndroid"}
-
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }
@@ -59,6 +69,9 @@ firebase-firestore = { module = "com.google.firebase:firebase-firestore-ktx" }
 firebase-database = { module = "com.google.firebase:firebase-database" }
 google-services = { group = "com.google.gms", name = "google-services", version.ref = "google-services" }
 androidx-work-runtime-ktx = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "workRuntimeKtxVersion" }
+volley = { group = "com.android.volley", name = "volley", version.ref = "volley" }
+androidx-runner = { group = "androidx.test", name = "runner", version.ref = "runner" }
+coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
@@ -67,3 +80,10 @@ google-services = { id = "com.google.gms.google-services", version.ref = "google
 
 [bundles]
 firebase = ["firebase-analytics", "firebase-auth", "firebase-firestore", "firebase-messaging"]
+network = [
+    "retrofit-core",
+    "retrofit-converter-gson",
+    "okhttp-core",
+    "okhttp-logging",
+    "gson"
+]

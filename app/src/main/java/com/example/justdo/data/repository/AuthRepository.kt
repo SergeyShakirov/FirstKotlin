@@ -27,6 +27,7 @@ class AuthRepository(
                 id = firebaseUser.uid,
                 email = email,
                 username = username,
+                avatarUrl = "",
                 chats = emptyList()
             )
 

@@ -29,9 +29,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import coil.transform.CircleCropTransformation
 import com.example.justdo.data.models.User
 import kotlin.random.Random
 
@@ -83,19 +87,35 @@ fun UserListItem(
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
-                modifier = Modifier
-                    .size(45.dp)
-                    .clip(CircleShape)
-                    .background(randomColor),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = user.username.first().uppercase(),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold
+            // Заменяем Box на AsyncImage с fallback на букву
+            if (user.avatarUrl != null) {
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(user.avatarUrl)
+                        .crossfade(true)
+                        .transformations(CircleCropTransformation())
+                        .build(),
+                    contentDescription = "Аватар пользователя ${user.username}",
+                    modifier = Modifier
+                        .size(45.dp)
+                        .clip(CircleShape),
                 )
+            } else {
+                // Показываем букву если нет аватара
+                Box(
+                    modifier = Modifier
+                        .size(45.dp)
+                        .clip(CircleShape)
+                        .background(randomColor),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = user.username.first().uppercase(),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.width(12.dp))

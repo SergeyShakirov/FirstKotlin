@@ -21,18 +21,19 @@ import com.example.justdo.data.repository.AuthRepository
 import com.example.justdo.navigation.Screen
 import kotlinx.coroutines.launch
 import com.example.justdo.data.repository.ChatRepository
+import com.example.justdo.data.repository.UserRepository
 import com.example.justdo.presentation.ChatListViewModel
 import com.example.justdo.services.MessageHandler
 import com.example.justdo.utils.NotificationHelper
 import kotlinx.coroutines.flow.first
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun MyApp(
     repository: AuthRepository,
     chatRepository: ChatRepository = ChatRepository(),
+    userRepository: UserRepository = UserRepository(),
     viewModel: ChatListViewModel = viewModel(
-        factory = ChatListViewModel.Factory(chatRepository)
+        factory = ChatListViewModel.Factory(chatRepository, userRepository)
     )
 ) {
     var isAuthenticated by remember { mutableStateOf(false) }
@@ -67,7 +68,7 @@ fun MyApp(
         try {
             viewModel.getCurrentUser()
             val user = viewModel.currentUser.first() ?: return@LaunchedEffect
-
+            isAuthenticated = true
             viewModel.loadChats()
             val loadedChats = viewModel.chats.first { it.isNotEmpty() }
 
@@ -82,7 +83,7 @@ fun MyApp(
             }
             viewModel.updateMessageHandler(handler)
 
-            isAuthenticated = true
+
             if (!notificationHelper.hasNotificationPermission()) {
                 notificationHelper.requestNotificationPermission(permissionLauncher)
             }
@@ -94,12 +95,14 @@ fun MyApp(
     }
 
     LaunchedEffect(pagerState.currentPage) {
-        when (pagerState.currentPage) {
-            0 -> navController.navigate(Screen.Chats.route) {
-                popUpTo(Screen.Chats.route) { inclusive = true }
-            }
-            1 -> navController.navigate(Screen.Profile.route) {
-                popUpTo(Screen.Profile.route) { inclusive = true }
+        currentUser?.let {
+            when (pagerState.currentPage) {
+                0 -> navController.navigate(Screen.Chats.route) {
+                    popUpTo(Screen.Chats.route) { inclusive = true }
+                }
+                1 -> navController.navigate(Screen.Profile.route) {
+                    popUpTo(Screen.Profile.route) { inclusive = true }
+                }
             }
         }
     }
@@ -126,7 +129,7 @@ fun MyApp(
         NavHost(
             navController = navController,
             startDestination = when {
-                !isAuthenticated -> "login"
+                !isAuthenticated -> ("login")
                 chatId != null -> Screen.Chat.route
                 navigationRoute != null -> navigationRoute
                 else -> Screen.Chats.route
@@ -214,6 +217,9 @@ fun MyApp(
                                         popUpTo(0)
                                     }
                                 }
+                            },
+                            onAvatarSelected = { uri ->
+                                viewModel.uploadAvatar(uri)
                             }
                         )
                     }
@@ -262,6 +268,9 @@ fun MyApp(
                                         popUpTo(0)
                                     }
                                 }
+                            },
+                            onAvatarSelected = { uri ->
+                                viewModel.uploadAvatar(uri)
                             }
                         )
                     }
