@@ -27,6 +27,7 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.justdo.data.models.User
 import com.example.justdo.domain.models.UploadState
+import com.example.justdo.navigation.Screen
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -34,7 +35,8 @@ fun ProfileScreen(
     user: User?,
     uploadState: UploadState = UploadState.Idle,
     onLogout: () -> Unit,
-    onAvatarSelected: (Uri) -> Unit
+    onAvatarSelected: (Uri) -> Unit,
+    onMapClicked: () -> Unit,
 ) {
     var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
     val context = LocalContext.current
@@ -163,6 +165,15 @@ fun ProfileScreen(
                     title = "Email",
                     value = user?.email ?: "Не указано"
                 )
+                // В ProfileScreen добавьте кнопку, которая будет вести на экран карты
+                Button(
+                    onClick = { onMapClicked() },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary
+                    )
+                ) {
+                    Text("Открыть карту")
+                }
             }
         }
     }

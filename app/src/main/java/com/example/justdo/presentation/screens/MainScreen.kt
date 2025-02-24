@@ -47,7 +47,7 @@ fun MyApp(
     val notificationHelper = remember { NotificationHelper(context) }
     val chatId = remember { activity?.intent?.getStringExtra("chatId") }
 
-    val pagerState = rememberPagerState(pageCount = { 2 })
+    val pagerState = rememberPagerState(pageCount = { 3 })
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -100,6 +100,13 @@ fun MyApp(
                     )
                 )
                 1 -> pagerState.animateScrollToPage(
+                    page = 0,
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioNoBouncy,
+                        stiffness = Spring.StiffnessMedium
+                    )
+                )
+                2 -> pagerState.animateScrollToPage(
                     page = 1,
                     animationSpec = spring(
                         dampingRatio = Spring.DampingRatioNoBouncy,
@@ -186,7 +193,15 @@ fun MyApp(
                     pageSpacing = 0.dp,
                 ) { page ->
                     when (page) {
-                        0 -> currentUser?.let { user ->
+                        0 -> currentUser?.let {
+                            MapScreen(
+                                onBack = {
+                                    navController.navigate(Screen.Chats.route)
+                                }
+                            )
+                        }
+
+                        1 -> currentUser?.let { user ->
                             ChatList(
                                 currentUser = user,
                                 onChatClicked = { chat ->
@@ -201,7 +216,7 @@ fun MyApp(
                                 viewModel = viewModel
                             )
                         }
-                        1 -> ProfileScreen(
+                        2 -> ProfileScreen(
                             user = currentUser,
                             onLogout = {
                                 scope.launch {
@@ -215,6 +230,9 @@ fun MyApp(
                             },
                             onAvatarSelected = { uri ->
                                 viewModel.uploadAvatar(uri)
+                            },
+                            onMapClicked = {
+                                navController.navigate(Screen.Map.route)
                             }
                         )
                     }
@@ -232,6 +250,13 @@ fun MyApp(
                     )
                 }
             }
+//            composable(Screen.Map.route) {
+//                MapScreen(
+//                    onBack = {
+//                        navController.navigate(Screen.Chats.route)
+//                    }
+//                )
+//            }
         }
     }
 }
