@@ -19,6 +19,40 @@ class ChatRepository {
     private val TAG = "ChatRepository"
     private var updatedUserData: User? = null
 
+    suspend fun listenToMessages(chatId: String, onNewMessages: (List<Message>) -> Unit) {
+        try {
+            firestore.collection("messages")
+                .document(chatId)
+                .collection("messages")
+                .orderBy("timestamp", Query.Direction.DESCENDING)
+                .addSnapshotListener { snapshot, e ->
+                    if (e != null) {
+                        Log.e("ChatViewModel", "Error listening to messages", e)
+                        return@addSnapshotListener
+                    }
+
+                    val messages = snapshot?.documents?.mapNotNull { doc ->
+                        try {
+                            Message(
+                                id = doc.id,
+                                senderId = doc.getString("senderId") ?: return@mapNotNull null,
+                                text = doc.getString("text") ?: "",
+                                timestamp = doc.getTimestamp("timestamp"),
+                                isRead = doc.getBoolean("isRead") ?: false
+                            )
+                        } catch (e: Exception) {
+                            Log.e("ChatViewModel", "Error mapping message", e)
+                            null
+                        }
+                    } ?: emptyList()
+
+                    onNewMessages(messages)
+                }
+        } catch (e: Exception) {
+            Log.e("ChatViewModel", "Error setting up message listener", e)
+        }
+    }
+
     // Подписка на сообщения в чате
     fun subscribeToMessages(chatId: String): Flow<List<Message>> = callbackFlow {
         // Добавьте проверку входных данных
@@ -66,6 +100,60 @@ class ChatRepository {
         }
     }
 
+    suspend fun markMessageAsRead(chatId: String, messageId: String) {
+        try {
+            firestore.collection("messages")
+                .document(chatId)
+                .collection("messages")
+                .document(messageId)
+                .update("isRead", true)
+                .await()
+        } catch (e: Exception) {
+            Log.e("ChatViewModel", "Ошибка при отметке сообщения как прочитанного", e)
+        }
+    }
+
+    suspend fun updateLastMessage(chatId: String, text: String) {
+        try {
+            firestore.collection("newChats")
+                .document(chatId)
+                .update(
+                    mapOf(
+                        "lastMessage" to text,
+                        "timestamp" to FieldValue.serverTimestamp()
+                    )
+                )
+                .await()
+        } catch (e: Exception) {
+            Log.e("ChatViewModel", "Error updating last message", e)
+            throw e
+        }
+    }
+
+    suspend fun sendMessageNew(chatId: String, senderId: String, text: String) {
+        try {
+            // Создаем новое сообщение
+            val message = mapOf(
+                "senderId" to senderId,
+                "text" to text,
+                "timestamp" to FieldValue.serverTimestamp(),
+                "isRead" to false,
+                "notificationSent" to false
+            )
+
+            // Добавляем сообщение в подколлекцию messages
+            firestore.collection("messages")
+                .document(chatId)
+                .collection("messages")
+                .add(message)
+                .await()
+
+        } catch (e: Exception) {
+            Log.e("ChatViewModel", "Error sending message", e)
+            throw e
+        }
+    }
+
     suspend fun sendMessage(chat: Chat, text: String, viewModel: ChatListViewModel) {
         try {
             val currentUser = auth.currentUser ?: throw Exception("Пользователь не аутентифицирован")
@@ -76,7 +164,8 @@ class ChatRepository {
                 "senderId" to currentUser.uid,
                 "text" to text,
                 "timestamp" to timestamp,
-                "isRead" to false
+                "isRead" to false,
+                "notificationSent" to false
             )
 
             val otherUserId = if (chat.id.startsWith(currentUser.uid)) {
@@ -104,7 +193,7 @@ class ChatRepository {
                 val updatedChat = Chat(
                     id = chat.id,
                     lastMessage = text,
-                    lastMessageTimestamp = timestamp
+                    timestamp = timestamp
                 )
 
                 // 3. Операции записи

@@ -64,10 +64,10 @@ fun UserListItem(
         ), label = ""
     )
 
-    Card(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .scale(scale)
+            //.scale(scale)
             .clickable(
                 onClick = {
                     isPressed = true
@@ -75,20 +75,20 @@ fun UserListItem(
                     isPressed = false
                 }
             ),
-        shape = RoundedCornerShape(12.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+//        shape = RoundedCornerShape(12.dp),
+//        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(
-                    color = MaterialTheme.colorScheme.surfaceVariant
-                )
-                .padding(12.dp),
+//                .background(
+//                    color = MaterialTheme.colorScheme.surfaceVariant
+//                )
+                .padding(10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Заменяем Box на AsyncImage с fallback на букву
-            if (user.avatarUrl != null) {
+            if (user.avatarUrl != "") {
                 AsyncImage(
                     model = ImageRequest.Builder(LocalContext.current)
                         .data(user.avatarUrl)
@@ -106,7 +106,7 @@ fun UserListItem(
                     modifier = Modifier
                         .size(45.dp)
                         .clip(CircleShape)
-                        .background(randomColor),
+                        .background(Color(0xFFD32F2F)),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(

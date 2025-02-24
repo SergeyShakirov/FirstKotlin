@@ -29,6 +29,8 @@ coil = "2.4.0"
 retrofit = "2.9.0"
 okhttp = "4.12.0"
 gson = "2.10.1"
+maps-compose = "4.3.0"
+play-services-maps = "18.2.0"
 
 [libraries]
 retrofit-core = { group = "com.squareup.retrofit2", name = "retrofit", version.ref = "retrofit" }
@@ -72,6 +74,8 @@ androidx-work-runtime-ktx = { group = "androidx.work", name = "work-runtime-ktx"
 volley = { group = "com.android.volley", name = "volley", version.ref = "volley" }
 androidx-runner = { group = "androidx.test", name = "runner", version.ref = "runner" }
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
+google-maps-compose = { group = "com.google.maps.android", name = "maps-compose", version.ref = "maps-compose" }
+google-play-services-maps = { group = "com.google.android.gms", name = "play-services-maps", version.ref = "play-services-maps" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
@@ -86,4 +90,8 @@ network = [
     "okhttp-core",
     "okhttp-logging",
     "gson"
+]
+maps = [
+    "google-maps-compose",
+    "google-play-services-maps"
 ]

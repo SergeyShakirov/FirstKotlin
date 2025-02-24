@@ -1,13 +1,13 @@
 package com.example.justdo.presentation
 
-import android.app.Application
-import android.content.Context
 import android.net.Uri
 import android.util.Log
+import android.webkit.MimeTypeMap
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.justdo.data.models.Chat
+import com.example.justdo.data.models.Message
 import com.example.justdo.data.models.User
 import com.example.justdo.data.repository.ChatRepository
 import com.example.justdo.data.repository.UserRepository
@@ -15,9 +15,13 @@ import com.example.justdo.domain.models.UploadState
 import com.example.justdo.network.api.ImgurApi
 import com.example.justdo.network.constants.ImgurConfig
 import com.example.justdo.services.MessageHandler
+import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthException
+import com.google.firebase.firestore.DocumentSnapshot
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -31,25 +35,8 @@ import okhttp3.OkHttpClient
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import java.util.Date
-
-import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
-import okhttp3.RequestBody.Companion.toRequestBody
 import okio.IOException
-import retrofit2.Response
-import retrofit2.http.Header
-import retrofit2.http.Multipart
-import retrofit2.http.POST
-import retrofit2.http.Part
-
-import okhttp3.MediaType.Companion.toMediaTypeOrNull
-import okhttp3.RequestBody.Companion.toRequestBody
-
-import okhttp3.MediaType.Companion.toMediaTypeOrNull
-import okhttp3.RequestBody
-import okhttp3.RequestBody.Companion.toRequestBody
-import java.io.BufferedInputStream
-import java.io.InputStream
 
 class ChatListViewModel(
     private val chatRepository: ChatRepository,
@@ -103,80 +90,260 @@ class ChatListViewModel(
     val currentChat: StateFlow<Chat?> = _currentChat
 
     private val _users = MutableStateFlow<List<User>>(emptyList())
-    val users: StateFlow<List<User>> = _users // Исправлено имя публичного свойства
+    val users: StateFlow<List<User>> = _users
 
     private val _chats = MutableStateFlow<List<Chat>>(emptyList())
-    val chats: StateFlow<List<Chat>> = _currentUser.map { user ->
-        user?.chats?.sortByLastMessage() ?: emptyList()
-    }.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5000),
-        initialValue = emptyList()
-    )
+    val chats: StateFlow<List<Chat>> = _chats
 
-    fun markMessageAsRead(chatId: String, messageId: String) {
+    private val _messages = MutableStateFlow<List<Message>>(emptyList())
+    val messages = _messages.asStateFlow()
+
+    fun startMessageListener(chatId: String) {
         viewModelScope.launch {
-            messageHandler?.markMessageAsRead(chatId, messageId)
+            chatRepository.listenToMessages(chatId) { newMessages ->
+                _messages.value = newMessages
+            }
         }
     }
 
-    // Обновляем функцию uploadAvatar для использования Imgur
+    fun markMessageAsRead(chatId: String, messageId: String) {
+        viewModelScope.launch {
+            chatRepository.markMessageAsRead(chatId, messageId)
+        }
+    }
+
+    fun loadUserChats(currentUserId: String) {
+        viewModelScope.launch {
+            try {
+                val userChats = getUserChats(currentUserId)
+                _chats.value = userChats
+            } catch (e: Exception) {
+                Log.e("ChatViewModel", "Error loading user chats", e)
+                _chats.value = emptyList()
+            }
+        }
+    }
+
+    fun onSendMessage(text: String) {
+        if (text.isBlank()) return
+
+        viewModelScope.launch {
+            try {
+                val currentChat = _currentChat.value
+                val currentUser = _currentUser.value
+
+                if (currentChat != null && currentUser != null) {
+                    chatRepository.sendMessageNew(currentChat.id, currentUser.id, text)
+                    chatRepository.updateLastMessage(currentChat.id, text)
+                }
+            } catch (e: Exception) {
+                Log.e("ChatViewModel", "Error sending message", e)
+                // Обработка ошибки
+            }
+        }
+    }
+
+    private suspend fun getUserChats(currentUserId: String): List<Chat> {
+        return try {
+            val chatsSnapshot = firestore.collection("newChats")
+                .whereArrayContains("participants", currentUserId)
+                .get()
+                .await()
+
+            chatsSnapshot.documents.mapNotNull { doc ->
+                try {
+                    val participants = doc.get("participants") as? List<String> ?: return@mapNotNull null
+
+                    // Находим ID второго участника (не текущего пользователя)
+                    val otherUserId = participants.find { it != currentUserId } ?: return@mapNotNull null
+
+                    // Получаем данные второго участника
+                    val otherUser = firestore.collection("users")
+                        .document(otherUserId)
+                        .get()
+                        .await()
+
+                    Chat(
+                        id = doc.get("id") as String,
+                        participants = participants,
+                        lastMessage = doc.get("lastMessage") as String? ?: "",
+                        timestamp = doc.get("timestamp") as? Timestamp,
+                        name = otherUser.getString("username") ?: "",
+                        avatarUrl = otherUser.getString("avatarUrl") ?: null
+                    )
+                } catch (e: Exception) {
+                    Log.e("ChatViewModel", "Error mapping chat document", e)
+                    null
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("ChatViewModel", "Error getting user chats", e)
+            emptyList()
+        }
+    }
+
+    suspend fun getChat(userId: String, currentUserId: String): Chat? {
+        return try {
+            // Проверяем оба возможных варианта id чата
+            val chatId1 = "${currentUserId}_${userId}"
+            val chatId2 = "${userId}_${currentUserId}"
+
+            // Пробуем найти чат по первому варианту id
+            var doc = firestore.collection("newChats")
+                .document(chatId1)
+                .get()
+                .await()
+
+            // Если не нашли, пробуем второй вариант
+            if (!doc.exists()) {
+                doc = firestore.collection("newChats")
+                    .document(chatId2)
+                    .get()
+                    .await()
+            }
+
+            if (doc.exists()) {
+                Chat(
+                    id = doc.get("id") as String,
+                    participants = doc.get("participants") as List<String>,
+                    lastMessage = doc.get("lastMessage") as String? ?: "",
+                    timestamp = doc.get("timestamp") as? Timestamp
+                )
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            Log.e("ChatViewModel", "Error getting chat", e)
+            null
+        }
+    }
+
+    suspend fun createChat(userId: String, currentUserId: String): Chat? {
+        return try {
+            val chatId = "${currentUserId}_${userId}"
+
+            // Создаем новый чат
+            val newChat = hashMapOf(
+                "id" to chatId,
+                "lastMessage" to "",
+                "timestamp" to Timestamp.now(),
+                "participants" to listOf(currentUserId, userId)
+            )
+
+            // Добавляем чат в коллекцию newChats
+            firestore.collection("newChats")
+                .document(chatId)
+                .set(newChat)
+                .await()
+
+            Chat(
+                id = chatId,
+                participants = listOf(currentUserId, userId),
+                lastMessage = "",
+                timestamp = Timestamp.now()
+            )
+
+        } catch (e: Exception) {
+            Log.e("ChatViewModel", "Error creating chat", e)
+            null
+        }
+    }
+
     fun uploadAvatar(uri: Uri) {
         viewModelScope.launch {
             _uploadState.value = UploadState.Loading
 
             try {
-                // Получаем context из Firebase Auth
                 val context = auth.app.applicationContext
 
-                // Читаем файл и конвертируем в ByteArray
-                val byteArray = context.contentResolver.openInputStream(uri)?.use { inputStream ->
-                    inputStream.readBytes()
-                } ?: throw IOException("Не удалось открыть файл")
+                // Проверяем существование файла
+                if (!context.contentResolver.openInputStream(uri)?.use { true }!! ?: false) {
+                    throw IOException("Файл не существует")
+                }
 
-                // Создаем RequestBody из ByteArray
+                // Проверяем размер файла
+                val fileSize = context.contentResolver.openInputStream(uri)?.use { it.available() } ?: 0
+                if (fileSize > 10 * 1024 * 1024) { // 10MB лимит
+                    throw IllegalArgumentException("Файл слишком большой (максимум 10MB)")
+                }
+
+                // Читаем файл с обработкой ошибок
+                val byteArray = context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                    inputStream.buffered().readBytes()
+                } ?: throw IOException("Не удалось прочитать файл")
+
+                // Проверяем, что файл не пустой
+                if (byteArray.isEmpty()) {
+                    throw IOException("Файл пустой")
+                }
+
+                // Создаем RequestBody с явным указанием типа контента
+                val contentType = context.contentResolver.getType(uri) ?: "image/jpeg"
                 val requestBody = okhttp3.RequestBody.create(
-                    "image/*".toMediaType(),
+                    contentType.toMediaType(),
                     byteArray
                 )
 
-                // Создаем MultipartBody.Part
+                // Создаем MultipartBody.Part с уникальным именем файла
+                val fileName = "avatar_${System.currentTimeMillis()}.${
+                    MimeTypeMap.getSingleton().getExtensionFromMimeType(contentType) ?: "jpg"
+                }"
+
                 val body = MultipartBody.Part.createFormData(
                     "image",
-                    "photo.jpg",
+                    fileName,
                     requestBody
                 )
 
-                // Загружаем на Imgur
-                val response = imgurApi.uploadImage(
-                    "Client-ID ${ImgurConfig.CLIENT_ID}",
-                    body
-                )
+                // Добавляем retry механизм
+                var retryCount = 0
+                var lastException: Exception? = null
 
-                if (response.isSuccessful && response.body()?.success == true) {
-                    val imageUrl = response.body()?.data?.link
-                        ?: throw IOException("Нет ссылки на изображение")
+                while (retryCount < 3) {
+                    try {
+                        val response = imgurApi.uploadImage(
+                            "Client-ID ${ImgurConfig.CLIENT_ID}",
+                            body
+                        )
 
-                    // Обновляем URL аватара в Firebase
-                    auth.currentUser?.uid?.let { userId ->
-                        firestore.collection("users")
-                            .document(userId)
-                            .update("avatarUrl", imageUrl)
-                            .await()
+                        if (response.isSuccessful && response.body()?.success == true) {
+                            val imageUrl = response.body()?.data?.link
+                                ?: throw IOException("Нет ссылки на изображение")
+
+                            // Обновляем URL аватара в Firebase
+                            auth.currentUser?.uid?.let { userId ->
+                                firestore.collection("users")
+                                    .document(userId)
+                                    .update("avatarUrl", imageUrl)
+                                    .await()
+                            }
+
+                            _uploadState.value = UploadState.Success(imageUrl)
+                            getCurrentUser()
+                            return@launch
+                        } else {
+                            throw IOException("Ошибка загрузки: ${response.code()} - ${response.message()}")
+                        }
+                    } catch (e: Exception) {
+                        lastException = e
+                        retryCount++
+                        if (retryCount < 3) {
+                            delay(1000L * retryCount) // Экспоненциальная задержка
+                            continue
+                        }
+                        throw e
                     }
-
-                    _uploadState.value = UploadState.Success(imageUrl)
-                    // Обновляем информацию о пользователе
-                    getCurrentUser()
-                } else {
-                    throw IOException("Ошибка загрузки: ${response.code()}")
                 }
+
+                throw lastException ?: IOException("Неизвестная ошибка при загрузке")
+
             } catch (e: Exception) {
                 _uploadState.value = UploadState.Error(
                     when (e) {
                         is FirebaseAuthException -> "Ошибка аутентификации: ${e.message}"
                         is SecurityException -> "Ошибка доступа к файлу: ${e.message}"
                         is IllegalArgumentException -> "Некорректный формат файла: ${e.message}"
+                        is IOException -> "Ошибка чтения файла: ${e.message}"
                         else -> "Произошла ошибка: ${e.message}"
                     }
                 )
@@ -261,21 +428,8 @@ class ChatListViewModel(
                     _currentUser.value = user
 
                     if (user.chats.isNotEmpty()) {
-                        // Получаем обновленные данные чатов
                         val loadedChats = chatRepository.getUpdatedChats(user.chats)
-
-                        // Находим новые чаты, сравнивая с текущим списком
-                        val currentChatIds = _chats.value.map { it.id }.toSet()
-                        val newChats = loadedChats.filter { it.id !in currentChatIds }
-
-                        if (newChats.isNotEmpty()) {
-                            messageHandler?.startListeningNewChats(newChats)
-                        }
-
-                        // Обновляем пользователя с актуальными чатами
                         _currentUser.value = user.copy(chats = loadedChats)
-                    } else {
-                        Log.d("ChatListViewModel", "У пользователя нет чатов")
                     }
                 } else {
                     Log.e("ChatListViewModel", "Пользователь не найден в базе")
@@ -351,10 +505,10 @@ class ChatListViewModel(
     // Для удобства можно вынести логику сортировки в отдельную extension-функцию:
     private fun List<Chat>.sortByLastMessage(): List<Chat> {
         return sortedByDescending { chat ->
-            when (chat.lastMessageTimestamp) {
-                is com.google.firebase.Timestamp -> (chat.lastMessageTimestamp as com.google.firebase.Timestamp).seconds
-                is Long -> chat.lastMessageTimestamp
-                is Date -> (chat.lastMessageTimestamp as Date).time
+            when (chat.timestamp) {
+                is com.google.firebase.Timestamp -> (chat.timestamp as com.google.firebase.Timestamp).seconds
+                is Long -> chat.timestamp
+                is Date -> (chat.timestamp as Date).time
                 else -> 0L
             }
         }

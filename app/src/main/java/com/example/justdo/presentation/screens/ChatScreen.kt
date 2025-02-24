@@ -5,27 +5,26 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.example.justdo.GogoApplication
 import com.example.justdo.data.models.Chat
 import com.example.justdo.data.models.Message
-import com.example.justdo.data.repository.ChatRepository
 import com.example.justdo.presentation.ChatListViewModel
 import com.google.firebase.auth.FirebaseAuth
-import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -33,89 +32,78 @@ fun ChatScreen(
     viewModel: ChatListViewModel,
     chat: Chat,
     onBack: () -> Unit,
-    chatRepository: ChatRepository = ChatRepository()
-    ) {
-        var messageText by remember { mutableStateOf("") }
-        val listState = rememberLazyListState()
-        val scope = rememberCoroutineScope()
-        val currentUserId = FirebaseAuth.getInstance().currentUser?.uid ?: ""
-        val snackbarHostState = remember { SnackbarHostState() }
-        var isLoading by remember { mutableStateOf(true) }
-        val chatRepository = remember { ChatRepository() }
+) {
+    // Получаем ChatManager через Application
+    val chatManager = (LocalContext.current.applicationContext as GogoApplication).chatManager
 
-        // Предотвращаем множественные подписки
-        var hasSubscribed by remember { mutableStateOf(false) }
+    var messageText by remember { mutableStateOf("") }
+    val listState = rememberLazyListState()
+    val currentUserId = FirebaseAuth.getInstance().currentUser?.uid ?: ""
+    val snackbarHostState = remember { SnackbarHostState() }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val messages by viewModel.messages.collectAsState()
 
-        // Получаем сообщения
-        var messages by remember { mutableStateOf<List<Message>>(emptyList()) }
+    var hasSubscribed by remember { mutableStateOf(false) }
 
-        LaunchedEffect(chat.id) {
-            viewModel.messageHandler?.stopListeningChat(chat.id)
-            if (!hasSubscribed) {
-                hasSubscribed = true
-                isLoading = true
-                try {
-                    chatRepository.subscribeToMessages(chat.id).collect { newMessages ->
-                        messages = newMessages
-                        isLoading = false
-                    }
-                } catch (e: Exception) {
-                    isLoading = false
-                    snackbarHostState.showSnackbar("Ошибка загрузки сообщений")
+    LaunchedEffect(chat.id) {
+        chatManager.setActiveChat(chat.id)
+        viewModel.startMessageListener(chat.id)
+    }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_PAUSE -> {
+                    // Чат становится неактивным
+                    chatManager.setActiveChat(null)
                 }
+
+                Lifecycle.Event.ON_RESUME -> {
+                    // Чат снова активен
+                    chatManager.setActiveChat(chat.id)
+                }
+
+                else -> {}
             }
         }
 
-    DisposableEffect(chat.id) {
+        lifecycleOwner.lifecycle.addObserver(observer)
+
         onDispose {
-            // При выходе - возобновляем прослушку
-            viewModel.messageHandler?.startListeningChat(chat)
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            chatManager.setActiveChat(null)
         }
     }
 
-        Scaffold(
-            topBar = {
-                TopAppBar(
-                    title = {
-                        Text(
-                            chat.name,
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                fontWeight = FontWeight.Bold
-                            )
-                        )
-                    },
-                    navigationIcon = {
-                        IconButton(onClick = onBack) {
-                            Icon(
-                                Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "Назад",
-                                tint = Color(0xFFD32F2F)
-                            )
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = Color.Transparent
+    Scaffold(
+        topBar = {
+            TopAppBar(title = {
+                Text(
+                    chat.name, style = MaterialTheme.typography.titleMedium.copy(
+                        fontWeight = FontWeight.Bold
                     )
                 )
-            },
+            }, navigationIcon = {
+                IconButton(onClick = onBack) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Назад",
+                        tint = Color(0xFFD32F2F)
+                    )
+                }
+            }, colors = TopAppBarDefaults.topAppBarColors(
+                containerColor = Color.Transparent
+            )
+            )
+        },
             // Redesigned message input section with red-white style and borderless design
             bottomBar = {
-                TelegramStyleChatInput(
-                    value = messageText,
+                TelegramStyleChatInput(value = messageText,
                     onValueChange = { messageText = it },
                     onSendMessage = {
-                        if (messageText.isNotBlank()) {
-                            scope.launch {
-                                try {
-                                    chatRepository.sendMessage(chat, messageText, viewModel)
-                                    messageText = ""
-                                } catch (e: Exception) {
-                                    snackbarHostState.showSnackbar("Ошибка отправки сообщения")
-                                }
-                            }
-                        }
-                    }
-                )
+                        viewModel.onSendMessage(messageText)
+                        messageText = ""
+                    })
             },
             snackbarHost = { SnackbarHost(snackbarHostState) }
         ) { paddingValues ->
@@ -131,32 +119,21 @@ fun ChatScreen(
                         )
                     )
             ) {
-                if (isLoading) {
-                    CircularProgressIndicator(
-                        modifier = Modifier
-                            .align(Alignment.Center)
-                            .size(48.dp),
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                } else {
-                    LazyColumn(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(paddingValues)
-                            .padding(horizontal = 16.dp),
-                        state = listState,
-                        reverseLayout = true
-                    ) {
-                        items(messages) { message ->
-                            MessageItem(
-                                viewModel = viewModel,
-                                chatId = chat.id,
-                                message = message,
-                                isCurrentUser = message.senderId == currentUserId,
-                            )
-                            //Spacer(modifier = Modifier.height(8.dp))
-                        }
-
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(paddingValues)
+                        .padding(horizontal = 16.dp),
+                    state = listState,
+                    reverseLayout = true
+                ) {
+                    items(messages) { message ->
+                        MessageItem(
+                            viewModel = viewModel,
+                            chatId = chat.id,
+                            message = message,
+                            isCurrentUser = message.senderId == currentUserId,
+                        )
                     }
                 }
             }

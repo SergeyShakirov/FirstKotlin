@@ -58,15 +58,14 @@ fun UserList(
                 )
             } else {
                 LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(8.dp)
+                    modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(8.dp)
                 ) {
                     items(users) { user ->
                         UserListItem(
                             user = user,
                             onClick = { onUserClicked(user) }
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
+                        //Spacer(modifier = Modifier.height(8.dp))
                     }
                 }
             }

@@ -1,11 +1,11 @@
-// MyApp.kt
 package com.example.justdo.presentation.screens
 
 import android.app.Activity
 import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.layout.*
@@ -14,16 +14,15 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.*
-import com.example.justdo.data.models.Chat
 import com.example.justdo.data.repository.AuthRepository
 import com.example.justdo.navigation.Screen
 import kotlinx.coroutines.launch
 import com.example.justdo.data.repository.ChatRepository
 import com.example.justdo.data.repository.UserRepository
 import com.example.justdo.presentation.ChatListViewModel
-import com.example.justdo.services.MessageHandler
 import com.example.justdo.utils.NotificationHelper
 import kotlinx.coroutines.flow.first
 
@@ -42,14 +41,11 @@ fun MyApp(
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
     val activity = context as? Activity
-    val navigationRoute = remember { activity?.intent?.getStringExtra("navigation_route") }
     val currentUser by viewModel.currentUser.collectAsState()
     val currentChat by viewModel.currentChat.collectAsState()
-    val chats by viewModel.chats.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
-    var messageHandler by remember { mutableStateOf<MessageHandler?>(null) }
     val notificationHelper = remember { NotificationHelper(context) }
-    val chatId = remember { activity?.intent?.getStringExtra("chat_id") }
+    val chatId = remember { activity?.intent?.getStringExtra("chatId") }
 
     val pagerState = rememberPagerState(pageCount = { 2 })
 
@@ -69,20 +65,19 @@ fun MyApp(
             viewModel.getCurrentUser()
             val user = viewModel.currentUser.first() ?: return@LaunchedEffect
             isAuthenticated = true
-            viewModel.loadChats()
+
+            viewModel.loadUserChats(user.id)
             val loadedChats = viewModel.chats.first { it.isNotEmpty() }
 
             chatId?.let { id ->
                 loadedChats.find { it.id == id }?.let { chat ->
                     viewModel.setCurrentChat(chat)
+                    viewModel.currentChat.first { it?.id == chat.id }
+                    navController.navigate(Screen.Chat.route) {
+                        popUpTo(Screen.Chats.route) { inclusive = true }
+                    }
                 }
             }
-
-            val handler = MessageHandler(context, loadedChats, user.id).also {
-                it.startListening(chatId ?: "")
-            }
-            viewModel.updateMessageHandler(handler)
-
 
             if (!notificationHelper.hasNotificationPermission()) {
                 notificationHelper.requestNotificationPermission(permissionLauncher)
@@ -97,20 +92,21 @@ fun MyApp(
     LaunchedEffect(pagerState.currentPage) {
         currentUser?.let {
             when (pagerState.currentPage) {
-                0 -> navController.navigate(Screen.Chats.route) {
-                    popUpTo(Screen.Chats.route) { inclusive = true }
-                }
-                1 -> navController.navigate(Screen.Profile.route) {
-                    popUpTo(Screen.Profile.route) { inclusive = true }
-                }
+                0 -> pagerState.animateScrollToPage(
+                    page = 0,
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioNoBouncy,
+                        stiffness = Spring.StiffnessMedium
+                    )
+                )
+                1 -> pagerState.animateScrollToPage(
+                    page = 1,
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioNoBouncy,
+                        stiffness = Spring.StiffnessMedium
+                    )
+                )
             }
-        }
-    }
-
-    DisposableEffect(Unit) {
-        onDispose {
-            messageHandler?.stopListening()
-            messageHandler = null
         }
     }
 
@@ -131,7 +127,6 @@ fun MyApp(
             startDestination = when {
                 !isAuthenticated -> ("login")
                 chatId != null -> Screen.Chat.route
-                navigationRoute != null -> navigationRoute
                 else -> Screen.Chats.route
             },
             modifier = Modifier.padding(paddingValues)
@@ -154,9 +149,6 @@ fun MyApp(
                     onRegisterSuccess = { user ->
                         viewModel.setCurrentUser(user)
                         isAuthenticated = true
-                        navController.navigate(Screen.Chats.route) {
-                            popUpTo(0)
-                        }
                     },
                     onBackToLogin = {
                         navController.navigateUp()
@@ -169,43 +161,46 @@ fun MyApp(
                     UserList(viewModel,
                         onUserClicked = { selectedUser ->
                             scope.launch {
-                                val chatId = "${user.id}_${selectedUser.id}"
-                                val newChat = Chat(
-                                    id = chatId,
-                                    name = selectedUser.username
-                                )
-                                viewModel.checkAndAddChatToUsers(newChat, selectedUser)
-                                viewModel.setCurrentChat(newChat)
-                                navController.navigate(Screen.Chat.route)
+                                viewModel.getChat(selectedUser.id, user.id)?.let { chat ->
+                                    viewModel.setCurrentChat(chat)
+                                } ?: run {
+                                    viewModel.createChat(selectedUser.id, user.id).let { chat ->
+                                        if (chat != null) {
+                                            viewModel.setCurrentChat(chat)
+                                            navController.navigate(Screen.Chat.route)
+                                        } else {
+                                            navController.navigate(Screen.Chats.route)
+                                        }
+                                    }
+                                }
                             }
                         }
                     )
-                } ?: run {
-                    LaunchedEffect(Unit) {
-                        navController.navigate("login")
-                    }
                 }
             }
 
             composable(Screen.Chats.route) {
                 HorizontalPager(
                     state = pagerState,
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier.fillMaxSize(),
+                    pageSpacing = 0.dp,
                 ) { page ->
                     when (page) {
-                        0 -> ChatList(
-                            chats = chats,
-                            onChatClicked = { chat ->
-                                scope.launch {
-                                    viewModel.setCurrentChat(chat)
-                                    navController.navigate(Screen.Chat.route)
-                                }
-                            },
-                            onAddClicked = {
-                                navController.navigate(Screen.Users.route)
-                            },
-                            viewModel = viewModel
-                        )
+                        0 -> currentUser?.let { user ->
+                            ChatList(
+                                currentUser = user,
+                                onChatClicked = { chat ->
+                                    scope.launch {
+                                        viewModel.setCurrentChat(chat)
+                                        navController.navigate(Screen.Chat.route)
+                                    }
+                                },
+                                onAddClicked = {
+                                    navController.navigate(Screen.Users.route)
+                                },
+                                viewModel = viewModel
+                            )
+                        }
                         1 -> ProfileScreen(
                             user = currentUser,
                             onLogout = {
@@ -235,45 +230,6 @@ fun MyApp(
                             navController.navigate(Screen.Chats.route)
                         }
                     )
-                }
-            }
-
-            composable(Screen.Profile.route) {
-                HorizontalPager(
-                    state = pagerState,
-                    modifier = Modifier.fillMaxSize()
-                ) { page ->
-                    when (page) {
-                        0 -> ChatList(
-                            chats = chats,
-                            onChatClicked = { chat ->
-                                scope.launch {
-                                    viewModel.setCurrentChat(chat)
-                                    navController.navigate(Screen.Chat.route)
-                                }
-                            },
-                            onAddClicked = {
-                                navController.navigate(Screen.Users.route)
-                            },
-                            viewModel = viewModel
-                        )
-                        1 -> ProfileScreen(
-                            user = currentUser,
-                            onLogout = {
-                                scope.launch {
-                                    repository.logout()
-                                    viewModel.logout()
-                                    isAuthenticated = false
-                                    navController.navigate("login") {
-                                        popUpTo(0)
-                                    }
-                                }
-                            },
-                            onAvatarSelected = { uri ->
-                                viewModel.uploadAvatar(uri)
-                            }
-                        )
-                    }
                 }
             }
         }

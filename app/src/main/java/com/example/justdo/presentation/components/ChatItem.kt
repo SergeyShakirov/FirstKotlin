@@ -79,7 +79,7 @@ fun ChatItem(
         ) {
 
             // Заменяем Box на AsyncImage с fallback на букву
-            if (chat.avatarUrl != null) {
+            if (chat.avatarUrl != "") {
                 AsyncImage(
                     model = ImageRequest.Builder(LocalContext.current)
                         .data(chat.avatarUrl)

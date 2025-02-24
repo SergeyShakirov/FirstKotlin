@@ -4,15 +4,29 @@ import android.net.Uri
 import android.util.Base64
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.SetOptions
+import com.google.firebase.firestore.ktx.firestore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
+import com.google.firebase.ktx.Firebase
 
 class UserRepository @Inject constructor(
     private val auth: FirebaseAuth = FirebaseAuth.getInstance(),
     private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance()
 ) {
+
+    suspend fun updateFcmToken(userId: String, token: String) {
+        Firebase.firestore
+            .collection("users")
+            .document(userId)
+            .set(
+                mapOf("fcmToken" to token),
+                SetOptions.merge()
+            )
+    }
+
     suspend fun uploadAvatar(uri: Uri): Result<String> = withContext(Dispatchers.IO) {
         try {
             val userId = auth.currentUser?.uid ?: throw Exception("User not authenticated")

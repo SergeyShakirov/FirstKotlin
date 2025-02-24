@@ -79,6 +79,7 @@ dependencies {
     implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.volley)
     implementation(libs.androidx.runner)
+    implementation(libs.bundles.maps)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

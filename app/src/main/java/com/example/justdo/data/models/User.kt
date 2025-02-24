@@ -6,5 +6,6 @@ data class User(
     val email: String = "",
     var lastMessage: String = "",
     var chats: List<Chat> = emptyList(),
-    val avatarUrl: String? = null
+    val avatarUrl: String? = null,
+    val fcmToken: String? = null
 )

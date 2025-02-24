@@ -7,5 +7,6 @@ data class Message(
     val text: String = "",
     val timestamp: Any? = null,
     val isRead: Boolean = false,
-    val chatId: String = ""
+    val chatId: String = "",
+    val notificationSent: Boolean = false
 )
