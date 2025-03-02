@@ -6,16 +6,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -23,10 +18,15 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.justdo.GogoApplication
 import com.example.justdo.data.models.Chat
 import com.example.justdo.data.models.Message
-import com.example.justdo.presentation.ChatListViewModel
+import com.example.justdo.presentation.components.TelegramStyleChatInput
+import com.example.justdo.presentation.viewmodels.ChatListViewModel
+import com.example.justdo.ui.components.TelegramAvatar
+import com.example.justdo.ui.components.TelegramTopBar
+import com.example.justdo.ui.theme.TelegramColors
 import com.google.firebase.auth.FirebaseAuth
+import java.text.SimpleDateFormat
+import java.util.*
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(
     viewModel: ChatListViewModel,
@@ -77,111 +77,137 @@ fun ChatScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(title = {
-                Text(
-                    chat.name, style = MaterialTheme.typography.titleMedium.copy(
-                        fontWeight = FontWeight.Bold
-                    )
-                )
-            }, navigationIcon = {
-                IconButton(onClick = onBack) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Назад",
-                        tint = Color(0xFFD32F2F)
+            TelegramTopBar(
+                title = chat.name,
+                subtitle = "был(а) в сети недавно", // Можно добавить статус пользователя
+                showBackButton = true,
+                onBackClick = onBack,
+                avatar = {
+                    TelegramAvatar(
+                        name = chat.name,
+                        avatarUrl = chat.avatarUrl,
+                        size = 36.dp
                     )
                 }
-            }, colors = TopAppBarDefaults.topAppBarColors(
-                containerColor = Color.Transparent
-            )
             )
         },
-            // Redesigned message input section with red-white style and borderless design
-            bottomBar = {
-                TelegramStyleChatInput(value = messageText,
-                    onValueChange = { messageText = it },
-                    onSendMessage = {
+        bottomBar = {
+            TelegramStyleChatInput(
+                value = messageText,
+                onValueChange = { messageText = it },
+                onSendMessage = {
+                    if (messageText.isNotBlank()) {
                         viewModel.onSendMessage(messageText)
                         messageText = ""
-                    })
-            },
-            snackbarHost = { SnackbarHost(snackbarHostState) }
-        ) { paddingValues ->
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(
-                                Color(0xFFD32F2F).copy(alpha = 0.1f),
-                                Color(0xFFF44336).copy(alpha = 0.1f)
-                            )
-                        )
-                    )
-            ) {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(paddingValues)
-                        .padding(horizontal = 16.dp),
-                    state = listState,
-                    reverseLayout = true
-                ) {
-                    items(messages) { message ->
-                        MessageItem(
-                            viewModel = viewModel,
-                            chatId = chat.id,
-                            message = message,
-                            isCurrentUser = message.senderId == currentUserId,
-                        )
                     }
+                }
+            )
+        },
+        containerColor = TelegramColors.Background,
+        snackbarHost = { SnackbarHost(snackbarHostState) }
+    ) { paddingValues ->
+        // Основной контент чата
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+        ) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                state = listState,
+                reverseLayout = true,
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+            ) {
+                items(messages) { message ->
+                    TelegramMessageItem(
+                        viewModel = viewModel,
+                        chatId = chat.id,
+                        message = message,
+                        isCurrentUser = message.senderId == currentUserId,
+                    )
                 }
             }
         }
-
-        // Очистка при уничтожении
-        DisposableEffect(chat.id) {
-            onDispose {
-                hasSubscribed = false
-            }
-        }
-
     }
 
-@Composable
-fun MessageItem(viewModel: ChatListViewModel, chatId: String, message: Message, isCurrentUser: Boolean) {
+    // Очистка при уничтожении
+    DisposableEffect(chat.id) {
+        onDispose {
+            hasSubscribed = false
+        }
+    }
+}
 
+@Composable
+fun TelegramMessageItem(
+    viewModel: ChatListViewModel,
+    chatId: String,
+    message: Message,
+    isCurrentUser: Boolean
+) {
     LaunchedEffect(Unit) {
         viewModel.markMessageAsRead(chatId, message.id)
+    }
+
+    val formattedTime = remember(message.timestamp) {
+        if (message.timestamp != null) {
+            val sdf = SimpleDateFormat("HH:mm", Locale.getDefault())
+            sdf.format(Date(message.timestamp))
+        } else {
+            ""
+        }
     }
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(bottom = 8.dp),
+            .padding(vertical = 2.dp),
         contentAlignment = if (isCurrentUser) Alignment.CenterEnd else Alignment.CenterStart
     ) {
-        Card(
-            modifier = Modifier.widthIn(max = 300.dp),
-            shape = RoundedCornerShape(
-                topStart = if (isCurrentUser) 16.dp else 4.dp,
-                topEnd = if (isCurrentUser) 4.dp else 16.dp,
-                bottomStart = 16.dp,
-                bottomEnd = 16.dp
-            ),
-            colors = CardDefaults.cardColors(
-                containerColor = if (isCurrentUser)
-                    MaterialTheme.colorScheme.primary.copy(alpha = 0.9f)
-                else
-                    MaterialTheme.colorScheme.surfaceVariant
-            )
+        Column(
+            horizontalAlignment = if (isCurrentUser) Alignment.End else Alignment.Start
         ) {
-            Text(
-                text = message.text,
-                modifier = Modifier.padding(12.dp),
-                color = if (isCurrentUser) Color.White else MaterialTheme.colorScheme.onSurface,
-                style = MaterialTheme.typography.bodyMedium
-            )
+            // Сообщение
+            Surface(
+                color = if (isCurrentUser) TelegramColors.MyMessage else TelegramColors.OtherMessage,
+                shape = RoundedCornerShape(
+                    topStart = if (isCurrentUser) 16.dp else 4.dp,
+                    topEnd = if (isCurrentUser) 4.dp else 16.dp,
+                    bottomStart = 16.dp,
+                    bottomEnd = 16.dp
+                ),
+                modifier = Modifier.widthIn(max = 260.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(
+                        start = 12.dp,
+                        end = 12.dp,
+                        top = 8.dp,
+                        bottom = 4.dp
+                    )
+                ) {
+                    // Текст сообщения
+                    Text(
+                        text = message.text,
+                        color = TelegramColors.TextPrimary,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+
+                    // Время отправки
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 2.dp),
+                        contentAlignment = Alignment.CenterEnd
+                    ) {
+                        Text(
+                            text = formattedTime,
+                            color = TelegramColors.TextSecondary,
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    }
+                }
+            }
         }
     }
 }

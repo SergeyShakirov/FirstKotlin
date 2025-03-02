@@ -6,4 +6,5 @@ sealed class Screen(val route: String) {
     data object Profile : Screen("profile")
     data object Chats : Screen("chats")
     data object Map : Screen("map")
+    data object GeoChat: Screen("geoChat")
 }

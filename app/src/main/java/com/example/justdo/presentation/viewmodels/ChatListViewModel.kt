@@ -1,4 +1,4 @@
-package com.example.justdo.presentation
+package com.example.justdo.presentation.viewmodels
 
 import android.net.Uri
 import android.util.Log
@@ -18,16 +18,11 @@ import com.example.justdo.services.MessageHandler
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthException
-import com.google.firebase.firestore.DocumentSnapshot
-import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import okhttp3.MediaType.Companion.toMediaType
@@ -48,13 +43,7 @@ class ChatListViewModel(
 
     // Состояние загрузки аватара
     private val _uploadState = MutableStateFlow<UploadState>(UploadState.Idle)
-    val uploadState = _uploadState.asStateFlow()
 
-    // Заменяем предыдущее объявление на это
-    var messageHandler: MessageHandler? = null
-        private set  // Делаем сеттер приватным
-
-    // Добавляем Imgur API
     private val imgurApi: ImgurApi by lazy {
         val client = OkHttpClient.Builder()
             .addInterceptor { chain ->
@@ -73,11 +62,6 @@ class ChatListViewModel(
             .addConverterFactory(GsonConverterFactory.create())
             .build()
             .create(ImgurApi::class.java)
-    }
-
-    // Теперь используем эту функцию для установки handler's
-    fun updateMessageHandler(handler: MessageHandler) {
-        messageHandler = handler
     }
 
     private val _isLoading = MutableStateFlow(false)
@@ -163,11 +147,17 @@ class ChatListViewModel(
                         .get()
                         .await()
 
+                    val timestamp = when (val timestampField = doc.get("timestamp")) {
+                        is Long -> timestampField
+                        is com.google.firebase.Timestamp -> timestampField.seconds * 1000 + timestampField.nanoseconds / 1000000
+                        else -> System.currentTimeMillis() // Fallback
+                    }
+
                     Chat(
                         id = doc.get("id") as String,
                         participants = participants,
                         lastMessage = doc.get("lastMessage") as String? ?: "",
-                        timestamp = doc.get("timestamp") as? Timestamp,
+                        timestamp = timestamp,
                         name = otherUser.getString("username") ?: "",
                         avatarUrl = otherUser.getString("avatarUrl") ?: null
                     )
@@ -207,7 +197,7 @@ class ChatListViewModel(
                     id = doc.get("id") as String,
                     participants = doc.get("participants") as List<String>,
                     lastMessage = doc.get("lastMessage") as String? ?: "",
-                    timestamp = doc.get("timestamp") as? Timestamp
+                    timestamp = doc.get("timestamp") as Long
                 )
             } else {
                 null
@@ -240,7 +230,7 @@ class ChatListViewModel(
                 id = chatId,
                 participants = listOf(currentUserId, userId),
                 lastMessage = "",
-                timestamp = Timestamp.now()
+                timestamp = System.currentTimeMillis()
             )
 
         } catch (e: Exception) {
@@ -407,115 +397,7 @@ class ChatListViewModel(
         }
     }
 
-    // Тогда функция станет более чистой:
-    fun loadChats() {
-        viewModelScope.launch {
-            try {
-                _isLoading.value = true
-
-                // Получаем ID текущего пользователя
-                val userId = _currentUser.value?.id ?: return@launch
-
-                // Получаем актуальные данные пользователя из Firestore
-                val userDoc = firestore.collection("users")
-                    .document(userId)
-                    .get()
-                    .await()
-
-                val user = userDoc.toObject(User::class.java)?.copy(id = userId)
-                if (user != null) {
-                    // Обновляем текущего пользователя
-                    _currentUser.value = user
-
-                    if (user.chats.isNotEmpty()) {
-                        val loadedChats = chatRepository.getUpdatedChats(user.chats)
-                        _currentUser.value = user.copy(chats = loadedChats)
-                    }
-                } else {
-                    Log.e("ChatListViewModel", "Пользователь не найден в базе")
-                }
-            } catch (e: Exception) {
-                Log.e("ChatListViewModel", "Ошибка загрузки чатов", e)
-            } finally {
-                _isLoading.value = false
-            }
-        }
-    }
-
-    suspend fun checkAndAddChatToUsers(chat: Chat, selectedUser: User) {
-        try {
-            val currentUser = _currentUser.value ?: return
-            val userRefs = listOf(
-                firestore.collection("users").document(currentUser.id),
-                firestore.collection("users").document(selectedUser.id)
-            )
-
-            // Получаем данные обоих пользователей
-            val userDocs = userRefs.map { it.get().await() }
-            val users = userDocs.map { it.toObject(User::class.java) }
-
-            // Проверяем наличие чата у обоих пользователей
-            val needsUpdate = users.map { user ->
-                user?.chats?.none { it.id == chat.id } ?: true
-            }
-
-            if (needsUpdate.any { it }) {
-                // Обновляем данные обоих пользователей
-                userRefs.zip(users).forEachIndexed { index, (ref, userData) ->
-                    if (needsUpdate[index]) {
-                        // Создаем копию чата с правильным именем для каждого пользователя
-                        val chatWithUpdatedName = chat.copy(
-                            name = if (index == 0) selectedUser.username else currentUser.username,
-                            avatarUrl = if (index == 0) selectedUser.avatarUrl else currentUser.avatarUrl
-                        )
-
-                        val updatedUser = userData?.copy(
-                            chats = (userData.chats ?: emptyList()) + chatWithUpdatedName
-                        ) ?: User(
-                            id = if (index == 0) currentUser.id else selectedUser.id,
-                            username = if (index == 0) currentUser.username else selectedUser.username,
-                            email = if (index == 0) currentUser.email else selectedUser.email,
-                            avatarUrl = "",
-                            chats = listOf(chat)
-                        )
-                        ref.set(updatedUser).await()
-
-                        // Обновляем currentUser в ViewModel если это текущий пользователь
-                        if (index == 0) {
-                            _currentUser.value = updatedUser
-                        }
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            Log.e("ChatViewModel", "Ошибка при добавлении чата", e)
-            throw e
-        }
-    }
-
-    // Вспомогательная функция для получения ID чата
-    fun getChatId(userId1: String, userId2: String): String {
-        return if (userId1 < userId2) {
-            "${userId1}_${userId2}"
-        } else {
-            "${userId2}_${userId1}"
-        }
-    }
-
-    // Для удобства можно вынести логику сортировки в отдельную extension-функцию:
-    private fun List<Chat>.sortByLastMessage(): List<Chat> {
-        return sortedByDescending { chat ->
-            when (chat.timestamp) {
-                is com.google.firebase.Timestamp -> (chat.timestamp as com.google.firebase.Timestamp).seconds
-                is Long -> chat.timestamp
-                is Date -> (chat.timestamp as Date).time
-                else -> 0L
-            }
-        }
-    }
-
     fun logout() {
-        // Явный сброс всех состояний
         _currentUser.value = null
         _chats.value = emptyList()
     }
