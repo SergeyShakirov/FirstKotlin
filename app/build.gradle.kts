@@ -83,6 +83,7 @@ dependencies {
     implementation(libs.play.services.location)
     implementation(libs.androidx.biometric)
     implementation(libs.compose.material.icons.extended)
+    implementation(libs.firebase.storage)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

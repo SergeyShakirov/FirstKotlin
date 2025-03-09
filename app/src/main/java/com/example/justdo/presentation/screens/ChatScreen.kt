@@ -18,6 +18,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.justdo.GogoApplication
 import com.example.justdo.data.models.Chat
 import com.example.justdo.data.models.Message
+import com.example.justdo.presentation.components.MessageItem
 import com.example.justdo.presentation.components.TelegramStyleChatInput
 import com.example.justdo.presentation.viewmodels.ChatListViewModel
 import com.example.justdo.ui.components.TelegramAvatar
@@ -119,9 +120,7 @@ fun ChatScreen(
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
             ) {
                 items(messages) { message ->
-                    TelegramMessageItem(
-                        viewModel = viewModel,
-                        chatId = chat.id,
+                    MessageItem(
                         message = message,
                         isCurrentUser = message.senderId == currentUserId,
                     )

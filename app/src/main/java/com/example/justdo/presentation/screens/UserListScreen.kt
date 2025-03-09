@@ -27,6 +27,7 @@ fun UserList(
 ) {
     val users by viewModel.users.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    val currentUser by viewModel.currentUser.collectAsState()
 
     // Состояние для поиска
     var searchQuery by remember { mutableStateOf("") }
@@ -101,10 +102,10 @@ fun UserList(
                         )
 
                         // Тонкий разделитель между элементами
-                        Divider(
-                            color = TelegramColors.Surface,
+                        HorizontalDivider(
+                            modifier = Modifier.padding(start = 72.dp), // Отступ слева для выравнивания с текстом
                             thickness = 0.5.dp,
-                            modifier = Modifier.padding(start = 72.dp) // Отступ слева для выравнивания с текстом
+                            color = TelegramColors.Surface
                         )
                     }
                 }

@@ -56,7 +56,7 @@ fun MapMessageOverlay(
     // Анимация прозрачности контейнера
     val containerAlpha by animateFloatAsState(
         targetValue = if (containerVisible) 1f else 0f,
-        animationSpec = tween(durationMillis = 1000)
+        animationSpec = tween(durationMillis = 1000), label = ""
     )
 
     // Анимация высоты контейнера в зависимости от состояния развернутости
@@ -81,10 +81,7 @@ fun MapMessageOverlay(
         }
     }
 
-    // КЛЮЧЕВОЙ МОМЕНТ: Явно обновляем локальный список при изменении входного списка
     LaunchedEffect(messages) {
-        Log.d("MapOverlay", "Обновление списка сообщений: ${messages.size} сообщений")
-
         // Показываем контейнер при получении новых сообщений
         containerVisible = true
         lastMessageTime = System.currentTimeMillis()
@@ -95,16 +92,12 @@ fun MapMessageOverlay(
         // Добавляем все сообщения из нового списка
         messagesList.addAll(messages)
 
-        // Отладочный вывод полученных сообщений
-        messages.forEach { message ->
-            Log.d("MapOverlay", "Сообщение: ID=${message.id}, текст=${message.text}, время=${message.timestamp}")
-        }
     }
 
-    // Отображаем контейнер для сообщений над инпутом
-    Box(modifier = Modifier
-        .fillMaxSize()
-        .padding(vertical = 64.dp)) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+    ) {
         // Создаем контейнер с градиентным фоном и возможностью клика
         Box(
             modifier = Modifier
@@ -120,7 +113,10 @@ fun MapMessageOverlay(
                     if (isExpanded) {
                         containerVisible = true
                     }
-                    Log.d("MapOverlay", "Состояние формы изменено: ${if (isExpanded) "развернута" else "свернута"}")
+                    Log.d(
+                        "MapOverlay",
+                        "Состояние формы изменено: ${if (isExpanded) "развернута" else "свернута"}"
+                    )
                 }
                 // Градиент для плавного затухания
                 .drawWithContent {

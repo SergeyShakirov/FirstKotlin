@@ -27,8 +27,8 @@ import java.util.*
  * ViewModel для работы с геолокационными сообщениями.
  */
 class GeoMessageViewModel(
-    private val geoMessageRepository: GeoMessageRepository,
     private val userRepository: UserRepository,
+    private val geoMessageRepository: GeoMessageRepository,
     private val context: Context
 ) : ViewModel() {
 
@@ -42,7 +42,7 @@ class GeoMessageViewModel(
     val isLoading: StateFlow<Boolean> = _isLoading
 
     private val _currentUser = MutableStateFlow<User?>(null)
-    val currentUser: StateFlow<User?> = _currentUser
+    val currentUser: StateFlow<User?> = userRepository.currentUser
 
     // Группировка сообщений по местоположению
     private val _groupedMessages = MutableStateFlow<Map<String, List<GeoMessage>>>(emptyMap())
@@ -70,32 +70,15 @@ class GeoMessageViewModel(
     /**
      * Получает текущего пользователя из Firebase
      */
-    suspend fun getCurrentUser() {
-        try {
-            val userDoc = auth.currentUser?.let {
-                firestore.collection("users")
-                    .document(it.uid)
-                    .get()
-                    .await()
-            }
-
-            if (userDoc != null && userDoc.exists()) {
-                val user = userDoc.toObject(User::class.java)?.copy(id = auth.currentUser?.uid ?: "")
-                _currentUser.value = user
-                Log.d("GeoMessageViewModel", "Получен текущий пользователь: ${user?.username}")
-            } else {
-                Log.e("GeoMessageViewModel", "Документ пользователя не найден")
-            }
-        } catch (e: Exception) {
-            Log.e("GeoMessageViewModel", "Ошибка при получении текущего пользователя", e)
-        }
+    private suspend fun getCurrentUser() {
+        userRepository.getCurrentUser()
     }
 
     /**
      * Устанавливает текущего пользователя
      */
     fun setCurrentUser(user: User?) {
-        _currentUser.value = user
+        userRepository.setCurrentUser(user)
     }
 
     /**
@@ -300,14 +283,14 @@ class GeoMessageViewModel(
      * Фабрика для создания GeoMessageViewModel с нужными зависимостями
      */
     class Factory(
-        private val geoMessageRepository: GeoMessageRepository,
         private val userRepository: UserRepository,
+        private val geoMessageRepository: GeoMessageRepository,
         private val context: Context
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             if (modelClass.isAssignableFrom(GeoMessageViewModel::class.java)) {
-                return GeoMessageViewModel(geoMessageRepository, userRepository, context) as T
+                return GeoMessageViewModel(userRepository, geoMessageRepository, context) as T
             }
             throw IllegalArgumentException("Unknown ViewModel class")
         }

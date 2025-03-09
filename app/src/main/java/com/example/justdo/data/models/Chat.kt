@@ -6,5 +6,5 @@ data class Chat(
     val lastMessage: String = "",
     val timestamp: Long = 0,
     var avatarUrl: String? = null,
-    var participants: List<String> = emptyList()
+    var participants: List<String?> = emptyList()
 )

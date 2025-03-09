@@ -1,8 +1,6 @@
 package com.example.justdo.presentation.viewmodels
 
-import android.net.Uri
 import android.util.Log
-import android.webkit.MimeTypeMap
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -10,28 +8,17 @@ import com.example.justdo.data.models.Chat
 import com.example.justdo.data.models.Message
 import com.example.justdo.data.models.User
 import com.example.justdo.data.repository.ChatRepository
+import com.example.justdo.data.repository.FirebaseStorageService
 import com.example.justdo.data.repository.UserRepository
-import com.example.justdo.domain.models.UploadState
-import com.example.justdo.network.api.ImgurApi
-import com.example.justdo.network.constants.ImgurConfig
-import com.example.justdo.services.MessageHandler
+import com.example.justdo.data.models.UploadState
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.auth.FirebaseAuthException
 import com.google.firebase.firestore.FirebaseFirestore
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
-import retrofit2.Retrofit
-import retrofit2.converter.gson.GsonConverterFactory
-import java.util.Date
-import okhttp3.MultipartBody
-import okio.IOException
 
 class ChatListViewModel(
     private val chatRepository: ChatRepository,
@@ -40,35 +27,15 @@ class ChatListViewModel(
 
     private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance()
     private val auth: FirebaseAuth = FirebaseAuth.getInstance()
-
-    // Состояние загрузки аватара
-    private val _uploadState = MutableStateFlow<UploadState>(UploadState.Idle)
-
-    private val imgurApi: ImgurApi by lazy {
-        val client = OkHttpClient.Builder()
-            .addInterceptor { chain ->
-                val original = chain.request()
-                val request = original.newBuilder()
-                    .header("Accept", "application/json")
-                    .method(original.method, original.body)
-                    .build()
-                chain.proceed(request)
-            }
-            .build()
-
-        Retrofit.Builder()
-            .baseUrl("https://api.imgur.com/")
-            .client(client)
-            .addConverterFactory(GsonConverterFactory.create())
-            .build()
-            .create(ImgurApi::class.java)
-    }
+    private val storageService = FirebaseStorageService()
+    // Состояние загрузки аватарки
+    val uploadState: StateFlow<UploadState> = storageService.uploadState
 
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading
 
     private val _currentUser = MutableStateFlow<User?>(null)
-    val currentUser: StateFlow<User?> = _currentUser
+    val currentUser: StateFlow<User?> = userRepository.currentUser
 
     private val _currentChat = MutableStateFlow<Chat?>(null)
     val currentChat: StateFlow<Chat?> = _currentChat
@@ -81,6 +48,24 @@ class ChatListViewModel(
 
     private val _messages = MutableStateFlow<List<Message>>(emptyList())
     val messages = _messages.asStateFlow()
+
+    // Список URL аватарок пользователя
+    private val _userAvatars = MutableStateFlow<List<String>>(emptyList())
+    val userAvatars = _userAvatars.asStateFlow()
+
+    // Состояние для обновления имени пользователя
+    private val _isUpdatingUsername = MutableStateFlow(false)
+    val isUpdatingUsername = _isUpdatingUsername.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            try {
+                getCurrentUser()
+            } catch (e: Exception) {
+                Log.e("ChatListViewModel", "Ошибка при инициализации", e)
+            }
+        }
+    }
 
     fun startMessageListener(chatId: String) {
         viewModelScope.launch {
@@ -172,11 +157,11 @@ class ChatListViewModel(
         }
     }
 
-    suspend fun getChat(userId: String, currentUserId: String): Chat? {
+    suspend fun getChat(userId: String): Chat? {
         return try {
             // Проверяем оба возможных варианта id чата
-            val chatId1 = "${currentUserId}_${userId}"
-            val chatId2 = "${userId}_${currentUserId}"
+            val chatId1 = "${currentUser.value?.id}_${userId}"
+            val chatId2 = "${userId}_${currentUser.value?.id}"
 
             // Пробуем найти чат по первому варианту id
             var doc = firestore.collection("newChats")
@@ -208,16 +193,51 @@ class ChatListViewModel(
         }
     }
 
-    suspend fun createChat(userId: String, currentUserId: String): Chat? {
+    /**
+     * Обновляет объект Chat, добавляя имя и аватарку пользователя из Firestore
+     *
+     * @param chat Объект чата, который нужно обновить
+     * @param currentUserId ID текущего пользователя
+     * @return Обновленный объект Chat с именем и аватаркой
+     */
+    suspend fun updateChatWithUserData(chat: Chat): Chat {
         return try {
-            val chatId = "${currentUserId}_${userId}"
+            // Находим ID другого участника (не текущего пользователя)
+            val otherUserId = chat.participants.firstOrNull { it != currentUser.value?.id } ?: return chat
+
+            // Получаем данные другого участника из Firestore
+            val otherUserDoc = firestore.collection("users")
+                .document(otherUserId)
+                .get()
+                .await()
+
+            if (otherUserDoc.exists()) {
+                // Копируем объект чата с обновленными данными
+                chat.copy(
+                    name = otherUserDoc.getString("username") ?: "",
+                    avatarUrl = otherUserDoc.getString("avatarUrl")
+                )
+            } else {
+                // Если пользователь не найден, возвращаем исходный чат
+                chat
+            }
+        } catch (e: Exception) {
+            Log.e("ChatViewModel", "Error updating chat with user data", e)
+            // В случае ошибки возвращаем исходный чат
+            chat
+        }
+    }
+
+    suspend fun createChat(userId: String): Chat? {
+        return try {
+            val chatId = "${currentUser.value?.id}_${userId}"
 
             // Создаем новый чат
             val newChat = hashMapOf(
                 "id" to chatId,
                 "lastMessage" to "",
                 "timestamp" to Timestamp.now(),
-                "participants" to listOf(currentUserId, userId)
+                "participants" to listOf(currentUser.value?.id, userId)
             )
 
             // Добавляем чат в коллекцию newChats
@@ -228,7 +248,7 @@ class ChatListViewModel(
 
             Chat(
                 id = chatId,
-                participants = listOf(currentUserId, userId),
+                participants = listOf(currentUser.value?.id, userId),
                 lastMessage = "",
                 timestamp = System.currentTimeMillis()
             )
@@ -239,123 +259,25 @@ class ChatListViewModel(
         }
     }
 
-    fun uploadAvatar(uri: Uri) {
+    /**
+     * Загружает все аватарки пользователя из Firebase Storage
+     */
+    fun loadUserAvatars(userId: String) {
         viewModelScope.launch {
-            _uploadState.value = UploadState.Loading
-
             try {
-                val context = auth.app.applicationContext
-
-                // Проверяем существование файла
-                if (!context.contentResolver.openInputStream(uri)?.use { true }!! ?: false) {
-                    throw IOException("Файл не существует")
-                }
-
-                // Проверяем размер файла
-                val fileSize = context.contentResolver.openInputStream(uri)?.use { it.available() } ?: 0
-                if (fileSize > 10 * 1024 * 1024) { // 10MB лимит
-                    throw IllegalArgumentException("Файл слишком большой (максимум 10MB)")
-                }
-
-                // Читаем файл с обработкой ошибок
-                val byteArray = context.contentResolver.openInputStream(uri)?.use { inputStream ->
-                    inputStream.buffered().readBytes()
-                } ?: throw IOException("Не удалось прочитать файл")
-
-                // Проверяем, что файл не пустой
-                if (byteArray.isEmpty()) {
-                    throw IOException("Файл пустой")
-                }
-
-                // Создаем RequestBody с явным указанием типа контента
-                val contentType = context.contentResolver.getType(uri) ?: "image/jpeg"
-                val requestBody = okhttp3.RequestBody.create(
-                    contentType.toMediaType(),
-                    byteArray
-                )
-
-                // Создаем MultipartBody.Part с уникальным именем файла
-                val fileName = "avatar_${System.currentTimeMillis()}.${
-                    MimeTypeMap.getSingleton().getExtensionFromMimeType(contentType) ?: "jpg"
-                }"
-
-                val body = MultipartBody.Part.createFormData(
-                    "image",
-                    fileName,
-                    requestBody
-                )
-
-                // Добавляем retry механизм
-                var retryCount = 0
-                var lastException: Exception? = null
-
-                while (retryCount < 3) {
-                    try {
-                        val response = imgurApi.uploadImage(
-                            "Client-ID ${ImgurConfig.CLIENT_ID}",
-                            body
-                        )
-
-                        if (response.isSuccessful && response.body()?.success == true) {
-                            val imageUrl = response.body()?.data?.link
-                                ?: throw IOException("Нет ссылки на изображение")
-
-                            // Обновляем URL аватара в Firebase
-                            auth.currentUser?.uid?.let { userId ->
-                                firestore.collection("users")
-                                    .document(userId)
-                                    .update("avatarUrl", imageUrl)
-                                    .await()
-                            }
-
-                            _uploadState.value = UploadState.Success(imageUrl)
-                            getCurrentUser()
-                            return@launch
-                        } else {
-                            throw IOException("Ошибка загрузки: ${response.code()} - ${response.message()}")
-                        }
-                    } catch (e: Exception) {
-                        lastException = e
-                        retryCount++
-                        if (retryCount < 3) {
-                            delay(1000L * retryCount) // Экспоненциальная задержка
-                            continue
-                        }
-                        throw e
-                    }
-                }
-
-                throw lastException ?: IOException("Неизвестная ошибка при загрузке")
-
+                _isLoading.value = true
+                val avatars = storageService.getUserAvatars(userId)
+                _userAvatars.value = avatars
             } catch (e: Exception) {
-                _uploadState.value = UploadState.Error(
-                    when (e) {
-                        is FirebaseAuthException -> "Ошибка аутентификации: ${e.message}"
-                        is SecurityException -> "Ошибка доступа к файлу: ${e.message}"
-                        is IllegalArgumentException -> "Некорректный формат файла: ${e.message}"
-                        is IOException -> "Ошибка чтения файла: ${e.message}"
-                        else -> "Произошла ошибка: ${e.message}"
-                    }
-                )
+                Log.e("ChatListViewModel", "Ошибка при загрузке аватарок", e)
+            } finally {
+                _isLoading.value = false
             }
         }
     }
 
-    suspend fun getCurrentUser() {
-        try {
-            val userDoc = auth.currentUser?.let {
-                firestore.collection("users")
-                    .document(it.uid)
-                    .get()
-                    .await()
-            }
-
-            if (userDoc != null) {
-                _currentUser.value = userDoc.toObject(User::class.java)
-            }
-        } catch (e: Exception) {
-            Log.e("getCurrentUser", "Ошибка при получении текущего пользователя", e)
-        }
+    private suspend fun getCurrentUser() {
+        _currentUser.value = userRepository.getCurrentUser()
     }
 
     fun setCurrentUser(user: User?) {
